@@ -180,8 +180,8 @@ export default function OffeneStunden({ profil, session }) {
           const k = kurseById[o.kurs_id];
           const soll = personen[k.lehrer_id];
           return (
-            <div key={key} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil }}>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div key={key} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ width: 4, borderRadius: 2, background: C.rose, alignSelf: "stretch", minHeight: 32 }} />
                 <div style={{ flex: 1 }}>
                   <div className="mono" style={{ fontSize: 13, color: C.inkSoft }}>
@@ -222,8 +222,8 @@ export default function OffeneStunden({ profil, session }) {
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         {listeAnlaesse.map((a) => (
-          <div key={a.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <div key={a.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ width: 4, borderRadius: 2, background: C.brass, alignSelf: "stretch", minHeight: 32 }} />
               <div style={{ flex: 1 }}>
                 <div className="mono" style={{ fontSize: 13, color: C.inkSoft }}>

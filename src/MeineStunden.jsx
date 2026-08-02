@@ -362,8 +362,8 @@ export default function MeineStunden({ profil, session }) {
         {lektionen.map((l) => {
           const k = K(l.kursId);
           return (
-            <div key={l.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil }}>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div key={l.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <div
                   style={{
                     width: 4,
@@ -437,8 +437,8 @@ export default function MeineStunden({ profil, session }) {
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {meineAnlaesse.map((a) => (
-              <div key={a.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil }}>
-                <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div key={a.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <div
                     style={{
                       width: 4,
