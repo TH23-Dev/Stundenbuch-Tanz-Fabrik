@@ -580,15 +580,22 @@ export default function Lektionsverwaltung({ session }) {
                     {satz(l)}
                   </td>
                   <td className="mono">{lohn(l) ? chf(lohn(l)) : "–"}</td>
-                  <td>
+                  <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {l.status === "ausgefallen" ? (
                       <Knopf klein onClick={() => aendern(l, { status: "geplant", bemerkung: "" })} disabled={monatGesperrt}>
                         Reaktivieren
                       </Knopf>
                     ) : (
-                      <Knopf klein variante="warn" onClick={() => aendern(l, { status: "ausgefallen", bemerkung: "Ausfall" })} disabled={monatGesperrt}>
-                        Fällt aus
-                      </Knopf>
+                      <>
+                        {l.status !== "gehalten" && !!l.istLehrer && (
+                          <Knopf klein onClick={() => aendern(l, { status: "gehalten", bemerkung: "" })} disabled={monatGesperrt}>
+                            Gehalten
+                          </Knopf>
+                        )}
+                        <Knopf klein variante="warn" onClick={() => aendern(l, { status: "ausgefallen", bemerkung: "Ausfall" })} disabled={monatGesperrt}>
+                          Fällt aus
+                        </Knopf>
+                      </>
                     )}
                   </td>
                 </tr>
