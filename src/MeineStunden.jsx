@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { C, eingabeStil } from "./theme";
 import { Tag, Knopf, karteStil } from "./ui";
-import { iso, datumLabel, datumVoll, wochentag, monatsGrenzen } from "./lib/datum";
+import { iso, datumLabel, datumVoll, wochentag, monatsGrenzen, istVergangen } from "./lib/datum";
 import { std } from "./lib/lohn";
 import { speichereLektionStatus, ladeAktuelleLektionen, ladeOffeneEigeneLektionen } from "./lib/lektionen";
 import { satzAmDatum } from "./lib/saetze";
@@ -153,7 +153,7 @@ export default function MeineStunden({ profil, session }) {
       .sort((a, b) => a.datum.localeCompare(b.datum) || K(a.kursId).zeit.localeCompare(K(b.kursId).zeit));
   }, [kurseById, overrides, profil.id, jahr, monatIndex, tageImMonat]);
 
-  const vergangen = (l) => new Date(l.datum + "T23:59") < new Date();
+  const vergangen = (l) => istVergangen(l.datum, K(l.kursId).zeit, K(l.kursId).dauer_min);
   const istVertretung = (l) => l.istLehrer && l.istLehrer !== l.sollLehrer;
   const unbest = (l) => l.status === "geplant" && vergangen(l) && l.istLehrer;
   const satz = (l) => {

@@ -24,6 +24,23 @@ export function kw(isoStr) {
 // Wochentag wie in kurse.wochentag: 1 = Montag ... 7 = Sonntag
 export const wochentag = (d) => (d.getDay() === 0 ? 7 : d.getDay());
 
+// Rechnerisches Ende einer Lektion (Startzeit + Dauer).
+export function lektionsEnde(datum, zeit, dauerMin) {
+  const [h, m] = zeit.split(":").map(Number);
+  const d = new Date(datum + "T12:00");
+  d.setHours(h, m, 0, 0);
+  return new Date(d.getTime() + dauerMin * 60000);
+}
+
+// Ab wann eine Lektion als "vergangen" gilt, also bestätigt werden kann:
+// standardmässig 30 Minuten vor dem rechnerischen Kursende, damit man auch
+// bei ein paar Minuten früherem Schluss schon vor dem Verlassen der
+// Lokalität bestätigen kann.
+export function istVergangen(datum, zeit, dauerMin, pufferMinuten = 30) {
+  const ende = lektionsEnde(datum, zeit, dauerMin);
+  return new Date() >= new Date(ende.getTime() - pufferMinuten * 60000);
+}
+
 export const TAGE = ["", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
 
 export function monatsGrenzen(heute = new Date()) {
