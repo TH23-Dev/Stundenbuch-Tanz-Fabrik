@@ -68,6 +68,11 @@ neu darf das auch reines `r_lohn` (nicht nur `r_admin`).
    Monats ein. (Achtung: `prototyp.jsx` zählt unbestätigte Lektionen
    fälschlich mit — das ist bei der Umsetzung zu korrigieren, nicht zu
    übernehmen.)
+   **«Vergangen» heisst hier nicht Tagesende:** Der «Gehalten»-Knopf
+   erscheint ab 30 Minuten vor dem rechnerischen Kursende (Startzeit +
+   Dauer), nicht erst ab Mitternacht — damit Lehrpersonen direkt nach der
+   eigenen Stunde und vor dem Verlassen der Lokalität bestätigen können,
+   auch wenn sie ein paar Minuten früher fertig sind.
 7. **Bilateraler Tausch:** Auch eine bereits vergangene Stunde kann freigegeben
    und neu zugeteilt werden, solange der Monat offen ist («Doch nicht gegeben»).
 8. **Abrechnungsperiode:** Kalendermonat. Der Abschluss erfolgt manuell durch
