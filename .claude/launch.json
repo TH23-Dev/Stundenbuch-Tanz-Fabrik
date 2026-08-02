@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "stundenbuch-dev",
+      "runtimeExecutable": "C:\\Users\\thoma\\OneDrive\\Dokumente\\_Privat\\Sarah\\Tanzfabrik\\Stundenabrechnung\\Stundenbuch\\.claude\\dev.cmd",
+      "runtimeArgs": [],
+      "port": 5173
+    }
+  ]
+}
