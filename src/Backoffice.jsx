@@ -228,61 +228,112 @@ export default function Backoffice({ session }) {
 
   async function exportieren() {
     const XLSX = await import("xlsx");
+    const CHF_FORMAT = '"CHF" #,##0.00';
+
+    // Setzt das CHF-Zahlenformat auf die genannten Spalten einer Sheet (per Header-Name).
+    function waehrungsformatSetzen(ws, headers, spaltenNamen, anzahlZeilen) {
+      spaltenNamen.forEach((spalte) => {
+        const c = headers.indexOf(spalte);
+        if (c === -1) return;
+        for (let r = 1; r <= anzahlZeilen; r++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (ws[addr]) ws[addr].z = CHF_FORMAT;
+        }
+      });
+    }
+
+    const summeTyp = (lehrerId, typ) =>
+      anlassAlsZusatz.filter((z) => z.lehrer_id === lehrerId && z.typ === typ).reduce((s, z) => s + Number(z.betrag), 0);
+    const summeManuell = (lehrerId) => zusatzListe.filter((z) => z.lehrer_id === lehrerId).reduce((s, z) => s + Number(z.betrag), 0);
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        auswertung.map((a) => ({
-          Name: a.p.nachname,
-          Vorname: a.p.vorname,
-          "Std.": a.stdNormal,
-          "Lohn Std.": Number(a.lohnStd.toFixed(2)),
-          "Std. Vertretung": a.stdVert,
-          "Satz Vertretung": a.p.vertretungssatz,
-          "Zusatz/Abzug": a.zusatz,
-          "Total CHF": Number(a.total.toFixed(2)),
-          Unbestätigt: a.unbest,
-        }))
-      ),
-      "Zusammenfassung"
+
+    const zusammenfassungHeader = [
+      "Name",
+      "Vorname",
+      "Std.",
+      "Lohn (CHF)",
+      "Std. Vertretung",
+      "Satz Vertretung (CHF)",
+      "Workshop (CHF)",
+      "Camp (CHF)",
+      "Auftritt (CHF)",
+      "Spesen/Abzug (CHF)",
+      "Total (CHF)",
+      "Unbestätigt",
+    ];
+    const zusammenfassungDaten = auswertung.map((a) => ({
+      Name: a.p.nachname,
+      Vorname: a.p.vorname,
+      "Std.": a.stdNormal,
+      "Lohn (CHF)": Number(a.lohnStd.toFixed(2)),
+      "Std. Vertretung": a.stdVert,
+      "Satz Vertretung (CHF)": a.p.vertretungssatz,
+      "Workshop (CHF)": Number(summeTyp(a.p.id, "Workshop").toFixed(2)),
+      "Camp (CHF)": Number(summeTyp(a.p.id, "Camp").toFixed(2)),
+      "Auftritt (CHF)": Number(summeTyp(a.p.id, "Auftritt").toFixed(2)),
+      "Spesen/Abzug (CHF)": Number(summeManuell(a.p.id).toFixed(2)),
+      "Total (CHF)": Number(a.total.toFixed(2)),
+      Unbestätigt: a.unbest,
+    }));
+    const wsZusammenfassung = XLSX.utils.json_to_sheet(zusammenfassungDaten, { header: zusammenfassungHeader });
+    waehrungsformatSetzen(
+      wsZusammenfassung,
+      zusammenfassungHeader,
+      ["Lohn (CHF)", "Satz Vertretung (CHF)", "Workshop (CHF)", "Camp (CHF)", "Auftritt (CHF)", "Spesen/Abzug (CHF)", "Total (CHF)"],
+      zusammenfassungDaten.length
     );
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        lektionen.map((l) => {
-          const k = K(l.kursId);
-          return {
-            Datum: datumVoll(l.datum),
-            Standort: orte[k.standort_code] || k.standort_code,
-            Zeit: k.zeit,
-            Kurs: k.bezeichnung,
-            Minuten: k.dauer_min,
-            Lohnstunden: stdFn(l),
-            Soll: name(l.sollLehrer),
-            Ist: l.istLehrer ? name(l.istLehrer) : "OFFEN",
-            Vertretung: istVertretung(l) ? "ja" : "",
-            Status: unbest(l) ? "unbestätigt" : l.status,
-            Satz: satz(l),
-            "Lohn CHF": Number(lohn(l).toFixed(2)),
-            Bemerkung: l.bemerkung,
-          };
-        })
-      ),
-      "Lektionen"
-    );
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        alleZusatz.map((z) => ({
-          Name: name(z.lehrer_id),
-          Typ: z.typ,
-          Betrag: z.betrag,
-          Bemerkung: z.bemerkung || "",
-          Herkunft: z.auto ? "Anlass" : "manuell",
-        }))
-      ),
-      "Zusatzpositionen"
-    );
+    XLSX.utils.book_append_sheet(wb, wsZusammenfassung, "Zusammenfassung");
+
+    const lektionenHeader = [
+      "Datum",
+      "Standort",
+      "Zeit",
+      "Kurs",
+      "Minuten",
+      "Lohnstunden",
+      "Soll",
+      "Ist",
+      "Vertretung",
+      "Status",
+      "Satz (CHF)",
+      "Lohn (CHF)",
+      "Bemerkung",
+    ];
+    const lektionenDaten = lektionen.map((l) => {
+      const k = K(l.kursId);
+      return {
+        Datum: datumVoll(l.datum),
+        Standort: orte[k.standort_code] || k.standort_code,
+        Zeit: k.zeit,
+        Kurs: k.bezeichnung,
+        Minuten: k.dauer_min,
+        Lohnstunden: stdFn(l),
+        Soll: name(l.sollLehrer),
+        Ist: l.istLehrer ? name(l.istLehrer) : "OFFEN",
+        Vertretung: istVertretung(l) ? "ja" : "",
+        Status: unbest(l) ? "unbestätigt" : l.status,
+        "Satz (CHF)": satz(l),
+        "Lohn (CHF)": Number(lohn(l).toFixed(2)),
+        Bemerkung: l.bemerkung,
+      };
+    });
+    const wsLektionen = XLSX.utils.json_to_sheet(lektionenDaten, { header: lektionenHeader });
+    waehrungsformatSetzen(wsLektionen, lektionenHeader, ["Satz (CHF)", "Lohn (CHF)"], lektionenDaten.length);
+    XLSX.utils.book_append_sheet(wb, wsLektionen, "Lektionen");
+
+    const zusatzHeader = ["Name", "Typ", "Betrag (CHF)", "Bemerkung", "Herkunft"];
+    const zusatzDaten = alleZusatz.map((z) => ({
+      Name: name(z.lehrer_id),
+      Typ: z.typ,
+      "Betrag (CHF)": Number(z.betrag),
+      Bemerkung: z.bemerkung || "",
+      Herkunft: z.auto ? "Anlass" : "manuell",
+    }));
+    const wsZusatz = XLSX.utils.json_to_sheet(zusatzDaten, { header: zusatzHeader });
+    waehrungsformatSetzen(wsZusatz, zusatzHeader, ["Betrag (CHF)"], zusatzDaten.length);
+    XLSX.utils.book_append_sheet(wb, wsZusatz, "Zusatzpositionen");
+
     XLSX.writeFile(wb, `Lehrerabrechnung_${monat}.xlsx`);
   }
 
