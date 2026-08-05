@@ -114,7 +114,7 @@ export default function Kurse() {
   return (
     <div>
       <h2 className="display" style={{ fontSize: 21, margin: "0 0 6px" }}>
-        Kurse verwalten
+        Kurse / Standorte verwalten
       </h2>
       <p style={{ color: C.inkSoft, fontSize: 13, marginTop: 0, marginBottom: 14 }}>
         Lehrer, Ansatz, Tag, Zeit, Dauer und Standort eines bestehenden Kurses sind absichtlich nicht direkt

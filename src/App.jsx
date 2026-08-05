@@ -70,7 +70,7 @@ export default function App() {
     optionen.push({ value: "lektionen", label: "Lektionen verwalten" });
   }
   if (profil?.aktiv && profil?.r_admin) {
-    optionen.push({ value: "kurse", label: "Kurse verwalten" });
+    optionen.push({ value: "kurse", label: "Kurse / Standorte verwalten" });
   }
   if (profil?.aktiv && (profil?.r_anlaesse || profil?.r_lohn || profil?.r_admin)) {
     optionen.push({ value: "anlaesse", label: "Anlässe verwalten" });
