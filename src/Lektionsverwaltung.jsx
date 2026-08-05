@@ -263,6 +263,65 @@ export default function Lektionsverwaltung({ session }) {
     }
   }
 
+  // Gegenstück zu ferienSetzen: reaktiviert im selben Standort/Zeitraum nur
+  // Lektionen mit bemerkung "Ferien" -- nicht einzeln gestrichene ("Ausfall")
+  // oder pausierte ("Pause") Lektionen, die im selben Zeitraum liegen könnten.
+  async function ferienRueckgaengig() {
+    if (!ferienVon || !ferienBis || ferienVon > ferienBis) return;
+    setAktionFehler("");
+
+    const betroffeneKurse = kurse.filter((k) => !ferienOrt || k.standort_code === ferienOrt);
+    if (betroffeneKurse.length === 0) {
+      setAktionFehler("Keine Kurse für diesen Standort gefunden.");
+      return;
+    }
+
+    const { data: bestehende, error: ladeErr } = await supabase
+      .from("lektion_status")
+      .select("kurs_id,datum,ist_lehrer")
+      .in("kurs_id", betroffeneKurse.map((k) => k.id))
+      .gte("datum", ferienVon)
+      .lte("datum", ferienBis)
+      .eq("status", "ausgefallen")
+      .eq("bemerkung", "Ferien");
+    if (ladeErr) {
+      setAktionFehler(ladeErr.message);
+      return;
+    }
+    if (!bestehende || bestehende.length === 0) {
+      setAktionFehler("Keine Ferien-Einträge in diesem Zeitraum/Standort gefunden.");
+      return;
+    }
+
+    setOverrides((prev) => {
+      const next = { ...prev };
+      bestehende.forEach((s) => {
+        if (s.datum >= von && s.datum <= bis) next[`${s.kurs_id}|${s.datum}`] = { ist_lehrer: s.ist_lehrer, status: "geplant", bemerkung: "" };
+      });
+      return next;
+    });
+
+    const ergebnisse = await Promise.all(
+      bestehende.map((s) =>
+        speichereLektionStatus(supabase, {
+          kursId: s.kurs_id,
+          datum: s.datum,
+          istLehrer: s.ist_lehrer,
+          status: "geplant",
+          bemerkung: "",
+          geaendertVon: session.user.id,
+        })
+      )
+    );
+    const fehlgeschlagen = ergebnisse.filter((r) => r.error).length;
+    if (fehlgeschlagen) {
+      setAktionFehler(`${fehlgeschlagen} von ${bestehende.length} Lektionen konnten nicht reaktiviert werden.`);
+    } else {
+      setFerienVon("");
+      setFerienBis("");
+    }
+  }
+
   // Pausiert einen einzelnen Kurs über einen frei wählbaren Zeitraum (z.B.
   // Semesterferien) — unabhängig vom aktuell angezeigten Monat, da der
   // Zeitraum über Monatsgrenzen hinausgehen kann.
@@ -470,9 +529,13 @@ export default function Lektionsverwaltung({ session }) {
         <Knopf onClick={ferienSetzen} disabled={!ferienVon || !ferienBis}>
           Stunden streichen
         </Knopf>
+        <Knopf onClick={ferienRueckgaengig} disabled={!ferienVon || !ferienBis}>
+          Rückgängig
+        </Knopf>
         <span style={{ fontSize: 12, color: C.inkSoft }}>
           Gestrichene Stunden werden nicht vergütet. Für jeden Standort einzeln wiederholbar, da nicht alle
-          gleichzeitig Ferien haben — auch über Monatsgrenzen hinweg.
+          gleichzeitig Ferien haben — auch über Monatsgrenzen hinweg. "Rückgängig" macht mit denselben Angaben
+          nur die hier gestrichenen Ferien-Lektionen wieder rückgängig.
         </span>
       </div>
 
