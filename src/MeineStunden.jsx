@@ -276,16 +276,22 @@ export default function MeineStunden({ profil, session }) {
     setAbsLaeuft(false);
   }
 
+  // Gibt {betroffeneCount, fehlgeschlagen} zurück, damit Aufrufer (Historie-
+  // Zeile, Bearbeiten) erkennen können, ob wirklich etwas zurückgeholt wurde
+  // -- vorher war das nicht ersichtlich: die Historie-Zeile blieb unverändert
+  // stehen und die Meldung erschien nur oben im Formular, ausserhalb des
+  // aufgeklappten Verlaufs, wo man sie leicht übersieht.
   async function stundenZurueckholen(zVon, zBis, { formZuruecksetzen } = {}) {
     setAbsFehler("");
     setAbsMeldung("");
     setAbsLaeuft(true);
+    let ergebnis = { betroffeneCount: 0, fehlgeschlagen: 0 };
     try {
       const betroffene = await ladeOffeneEigeneLektionen(supabase, profil.id, zVon, zBis);
       if (betroffene.length === 0) {
-        setAbsMeldung("Keine offenen eigenen Stunden im gewählten Zeitraum gefunden.");
+        setAbsMeldung("Keine offenen eigenen Stunden im gewählten Zeitraum gefunden — vermutlich bereits von jemand anderem übernommen.");
         setAbsLaeuft(false);
-        return;
+        return ergebnis;
       }
       setOverrides((prev) => {
         const next = { ...prev };
@@ -300,6 +306,7 @@ export default function MeineStunden({ profil, session }) {
         )
       );
       const fehlgeschlagen = ergebnisse.filter((r) => r.error).length;
+      ergebnis = { betroffeneCount: betroffene.length, fehlgeschlagen };
       setAbsMeldung(
         fehlgeschlagen
           ? `${betroffene.length - fehlgeschlagen} von ${betroffene.length} Stunde(n) zurückgeholt, ${fehlgeschlagen} fehlgeschlagen.`
@@ -313,6 +320,7 @@ export default function MeineStunden({ profil, session }) {
       setAbsFehler(e.message || String(e));
     }
     setAbsLaeuft(false);
+    return ergebnis;
   }
 
   function absenzRueckgaengig() {
@@ -320,11 +328,22 @@ export default function MeineStunden({ profil, session }) {
     stundenZurueckholen(absVon, absBis, { formZuruecksetzen: true });
   }
 
+  // Holt die Stunden einer Historie-Zeile zurück und entfernt die Zeile bei
+  // vollem Erfolg aus der Liste -- das ist die sichtbare Bestätigung, dass
+  // etwas passiert ist. Bleibt stehen, wenn nichts (mehr) offen war oder ein
+  // Teil fehlschlug, mit erklärender Meldung oben im Formular.
+  async function abwesenheitAusHistorieEntfernen(a) {
+    const { betroffeneCount, fehlgeschlagen } = await stundenZurueckholen(a.von, a.bis);
+    if (betroffeneCount > 0 && fehlgeschlagen === 0) {
+      setAbwesenheitenHistorie((prev) => prev.filter((x) => x.id !== a.id));
+    }
+  }
+
   // Macht eine Abwesenheit rückgängig und füllt das Formular direkt mit
   // ihrem Zeitraum vor, damit man nur noch das korrigieren muss, was falsch
   // war, statt sich Von/Bis selbst merken zu müssen.
-  function absenzBearbeiten(a) {
-    stundenZurueckholen(a.von, a.bis);
+  async function absenzBearbeiten(a) {
+    await abwesenheitAusHistorieEntfernen(a);
     setAbsVon(a.von);
     setAbsBis(a.bis);
   }
@@ -380,7 +399,7 @@ export default function MeineStunden({ profil, session }) {
                       <Knopf klein disabled={absLaeuft} onClick={() => absenzBearbeiten(a)}>
                         Bearbeiten
                       </Knopf>
-                      <Knopf klein disabled={absLaeuft} onClick={() => stundenZurueckholen(a.von, a.bis)}>
+                      <Knopf klein disabled={absLaeuft} onClick={() => abwesenheitAusHistorieEntfernen(a)}>
                         Rückgängig
                       </Knopf>
                     </td>
