@@ -196,13 +196,17 @@ create policy lesen on zusatzpositionen for select to authenticated
 --   streichen und Ist-Lehrer umverteilen (Etappe 4 Backoffice)
 --   Lehrer darf: sich austragen, eine offene Stunde übernehmen,
 --                die eigene Stunde als gehalten bestätigen
+-- Bewusst KEIN "eigener Kurs"-Sonderfall: eine Lektion des eigenen Kurses,
+-- die aktuell eine andere Person (Vertretung) hält, darf die ursprüngliche
+-- Lehrperson nicht einfach zurückholen oder die Vertretung hinauswerfen --
+-- erst wenn die Vertretung selbst wieder freigibt (ist_lehrer wird null),
+-- greift die dritte Bedingung unten und die Lektion ist für alle offen.
 create policy schreiben on lektion_status for all to authenticated
   using (
     monat_offen(datum) and (
       darf_lohn()
       or ist_lehrer = meine_lehrer_id()
       or ist_lehrer is null
-      or exists (select 1 from kurse k where k.id = kurs_id and k.lehrer_id = meine_lehrer_id())
     )
   )
   with check (
