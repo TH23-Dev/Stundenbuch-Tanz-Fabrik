@@ -16,6 +16,7 @@ export default function Kurse() {
   const [orte, setOrte] = useState({});
   const [lehrpersonen, setLehrpersonen] = useState([]);
   const [neuerKurs, setNeuerKurs] = useState(LEER_NEUER_KURS);
+  const [neuerStandort, setNeuerStandort] = useState({ code: "", name: "" });
 
   useEffect(() => {
     let aktiv = true;
@@ -92,6 +93,21 @@ export default function Kurse() {
     setNeuerKurs((k) => ({ ...k, bezeichnung: "", ansatz: "" }));
   }
 
+  async function standortHinzufuegen() {
+    const code = neuerStandort.code.trim();
+    const name = neuerStandort.name.trim();
+    if (!code || !name) return;
+    setAktionFehler("");
+    const { error } = await supabase.from("standorte").insert({ code, name });
+    if (error) {
+      setAktionFehler(error.message);
+      return;
+    }
+    setOrte((prev) => ({ ...prev, [code]: name }));
+    setNeuerKurs((k) => ({ ...k, ort: k.ort || code }));
+    setNeuerStandort({ code: "", name: "" });
+  }
+
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Kurse …</p>;
   if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Kurse konnten nicht geladen werden: {ladeFehler}</p>;
 
@@ -158,6 +174,45 @@ export default function Kurse() {
             })}
           </tbody>
         </table>
+      </div>
+
+      <h3 className="display" style={{ fontSize: 18, margin: "0 0 12px" }}>
+        Standorte verwalten
+      </h3>
+      <div style={{ ...karteStil, gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+        {Object.entries(orte).map(([code, n]) => (
+          <span
+            key={code}
+            style={{
+              fontSize: 12,
+              color: C.inkSoft,
+              border: `1px solid ${C.line}`,
+              borderRadius: 999,
+              padding: "3px 10px",
+            }}
+          >
+            {n} <span className="mono" style={{ color: C.muted }}>({code})</span>
+          </span>
+        ))}
+      </div>
+      <div style={{ ...karteStil, gap: 6, flexWrap: "wrap", marginBottom: 20 }}>
+        <input
+          placeholder="Kurzcode, z.B. TFXY"
+          value={neuerStandort.code}
+          onChange={(e) => setNeuerStandort({ ...neuerStandort, code: e.target.value })}
+          className="mono"
+          style={{ ...eingabeStil, width: 140 }}
+        />
+        <input
+          placeholder="Name, z.B. Baden"
+          value={neuerStandort.name}
+          onChange={(e) => setNeuerStandort({ ...neuerStandort, name: e.target.value })}
+          style={{ ...eingabeStil, width: 180 }}
+        />
+        <Knopf variante="voll" onClick={standortHinzufuegen} disabled={!neuerStandort.code.trim() || !neuerStandort.name.trim()}>
+          Standort hinzufügen
+        </Knopf>
+        <span style={{ fontSize: 12, color: C.inkSoft }}>Der Kurzcode ist danach nicht mehr änderbar, der Name jederzeit über Supabase.</span>
       </div>
 
       <h3 className="display" style={{ fontSize: 18, margin: "0 0 12px" }}>
