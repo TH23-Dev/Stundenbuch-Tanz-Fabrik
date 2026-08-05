@@ -109,7 +109,7 @@ export default function Lektionsverwaltung({ session }) {
   }, [lehrerListe]);
   const K = (id) => kurseById[id];
   const P = (id) => lehrerById[id];
-  const lehrpersonen = lehrerListe.filter((p) => p.r_lehrer);
+  const lehrpersonen = lehrerListe.filter((p) => p.r_lehrer && p.aktiv);
 
   const lektionen = useMemo(() => {
     const liste = [];

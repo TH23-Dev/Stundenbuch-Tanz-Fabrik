@@ -105,7 +105,7 @@ export default function Backoffice({ session }) {
     const p = P(id);
     return p ? `${p.vorname} ${p.nachname}` : "—";
   };
-  const lehrpersonen = lehrerListe.filter((p) => p.r_lehrer);
+  const lehrpersonen = lehrerListe.filter((p) => p.r_lehrer && p.aktiv);
 
   const lektionen = useMemo(() => {
     const liste = [];

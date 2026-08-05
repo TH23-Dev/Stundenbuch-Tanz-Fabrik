@@ -55,22 +55,27 @@ export default function App() {
   if (session === undefined) return null; // Session wird noch geladen
   if (!session) return <Login />;
 
+  // Eine inaktive Person bekommt kein Menü mehr -- unabhängig von ihren
+  // Rollen. Der eigentliche Zugriffsschutz sitzt zusätzlich in der
+  // Datenbank (RLS-Funktionen prüfen "aktiv" mit); das hier verhindert nur,
+  // dass die Person ein Menü sieht, dessen Aktionen ohnehin überall
+  // fehlschlagen würden.
   const optionen = [];
-  if (profil?.r_lehrer) {
+  if (profil?.aktiv && profil?.r_lehrer) {
     optionen.push({ value: "lehrer", label: "Meine Stunden" });
     optionen.push({ value: "offen", label: "Offene Stunden / Anlässe" });
   }
-  if (profil?.r_lohn || profil?.r_admin) {
+  if (profil?.aktiv && (profil?.r_lohn || profil?.r_admin)) {
     optionen.push({ value: "backoffice", label: "Abrechnung" });
     optionen.push({ value: "lektionen", label: "Lektionen verwalten" });
   }
-  if (profil?.r_admin) {
+  if (profil?.aktiv && profil?.r_admin) {
     optionen.push({ value: "kurse", label: "Kurse verwalten" });
   }
-  if (profil?.r_anlaesse || profil?.r_lohn || profil?.r_admin) {
+  if (profil?.aktiv && (profil?.r_anlaesse || profil?.r_lohn || profil?.r_admin)) {
     optionen.push({ value: "anlaesse", label: "Anlässe verwalten" });
   }
-  if (profil?.r_admin) {
+  if (profil?.aktiv && profil?.r_admin) {
     optionen.push({ value: "personen", label: "Personen & Rollen" });
   }
   const aktuelleAnsicht = optionen.some((o) => o.value === ansicht) ? ansicht : optionen[0]?.value;
@@ -154,7 +159,16 @@ export default function App() {
           </>
         )}
 
-        {profil && optionen.length === 0 && (
+        {profil && optionen.length === 0 && !profil.aktiv && (
+          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: 16 }}>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
+              Dieser Zugang ist deaktiviert. Bitte wende dich ans Backoffice, falls das nicht
+              stimmen sollte.
+            </p>
+          </div>
+        )}
+
+        {profil && optionen.length === 0 && profil.aktiv && (
           <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: 16 }}>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
               Für diesen Account gibt es hier noch keine Ansicht. Weitere Bereiche (Anlässe,

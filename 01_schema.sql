@@ -99,6 +99,11 @@ insert into einstellungen (schluessel, wert) values ('vertretungssatz', '60');
 -- ---------- Hilfsfunktionen ----------
 -- Rollen der angemeldeten Person. Admin schliesst Lohn und Anlässe mit ein.
 
+-- "aktiv" wird hier geprüft (nicht nur im Frontend): eine inaktive Person
+-- verliert dadurch automatisch jede Rolle und jede eigene Identität
+-- (meine_lehrer_id() liefert null) -- alle Policies unten, die auf diesen
+-- Funktionen aufbauen, sperren sie damit einheitlich, ohne jede einzeln
+-- anpassen zu müssen.
 create or replace function hat_rolle(feld text) returns boolean as $$
   select coalesce((
     select case feld
@@ -107,24 +112,24 @@ create or replace function hat_rolle(feld text) returns boolean as $$
       when 'lohn'     then r_lohn or r_admin
       when 'admin'    then r_admin
     end
-    from lehrer where user_id = auth.uid()
+    from lehrer where user_id = auth.uid() and aktiv
   ), false);
 $$ language sql security definer stable set search_path = public;
 
 create or replace function ist_admin() returns boolean as $$
-  select exists (select 1 from lehrer where user_id = auth.uid() and r_admin);
+  select exists (select 1 from lehrer where user_id = auth.uid() and r_admin and aktiv);
 $$ language sql security definer stable set search_path = public;
 
 create or replace function darf_lohn() returns boolean as $$
-  select exists (select 1 from lehrer where user_id = auth.uid() and (r_lohn or r_admin));
+  select exists (select 1 from lehrer where user_id = auth.uid() and (r_lohn or r_admin) and aktiv);
 $$ language sql security definer stable set search_path = public;
 
 create or replace function darf_anlaesse() returns boolean as $$
-  select exists (select 1 from lehrer where user_id = auth.uid() and (r_anlaesse or r_admin));
+  select exists (select 1 from lehrer where user_id = auth.uid() and (r_anlaesse or r_admin) and aktiv);
 $$ language sql security definer stable set search_path = public;
 
 create or replace function meine_lehrer_id() returns text as $$
-  select id from lehrer where user_id = auth.uid();
+  select id from lehrer where user_id = auth.uid() and aktiv;
 $$ language sql security definer stable set search_path = public;
 
 create or replace function monat_offen(d date) returns boolean as $$
