@@ -26,6 +26,7 @@ export default function MeineStunden({ profil, session }) {
   const [speichernFehler, setSpeichernFehler] = useState({});
   const [meineAnlaesse, setMeineAnlaesse] = useState([]);
   const [anlassFehler, setAnlassFehler] = useState({});
+  const [lehrerNamen, setLehrerNamen] = useState({});
 
   const [absVon, setAbsVon] = useState("");
   const [absBis, setAbsBis] = useState("");
@@ -49,6 +50,7 @@ export default function MeineStunden({ profil, session }) {
         { data: historieData, error: histErr },
         { data: anlaesseData, error: anlassErr },
         { data: abwesenheitData, error: abwErr },
+        { data: personenData, error: personenErr },
       ] = await Promise.all([
         supabase.from("standorte").select("code,name"),
         supabase.from("kurse").select(EIGENE_KURS_FELDER).eq("lehrer_id", profil.id),
@@ -58,14 +60,20 @@ export default function MeineStunden({ profil, session }) {
         // Anlässe sollen hier zum Bestätigen erscheinen.
         supabase.from("anlaesse").select("id,datum,zeit,titel,standort_code,typ,pauschale,lehrer_id,status").eq("lehrer_id", profil.id),
         supabase.from("abwesenheiten").select("id,von,bis,anzahl_stunden,erfasst_am").eq("lehrer_id", profil.id).order("erfasst_am", { ascending: false }).limit(20),
+        // Namen aller Personen (ohne Sätze/Löhne) -- damit sichtbar ist, wer
+        // eine freigegebene eigene Lektion übernommen hat.
+        supabase.from("v_personen_oeffentlich").select("id,vorname,nachname"),
       ]);
       if (!aktiv) return;
-      if (orteErr || kurseErr || histErr || anlassErr || abwErr) {
-        setLadeFehler((orteErr || kurseErr || histErr || anlassErr || abwErr).message);
+      if (orteErr || kurseErr || histErr || anlassErr || abwErr || personenErr) {
+        setLadeFehler((orteErr || kurseErr || histErr || anlassErr || abwErr || personenErr).message);
         setLaden(false);
         return;
       }
       setSatzHistorie(historieData || []);
+      const namenMap = {};
+      (personenData || []).forEach((p) => (namenMap[p.id] = `${p.vorname} ${p.nachname}`));
+      setLehrerNamen(namenMap);
       setMeineAnlaesse((anlaesseData || []).sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit)));
       setAbwesenheitenHistorie(abwesenheitData || []);
 
@@ -149,15 +157,20 @@ export default function MeineStunden({ profil, session }) {
       });
     }
     return liste
-      .filter((l) => l.istLehrer === profil.id || (l.sollLehrer === profil.id && !l.istLehrer))
+      .filter((l) => l.istLehrer === profil.id || l.sollLehrer === profil.id)
       .sort((a, b) => a.datum.localeCompare(b.datum) || K(a.kursId).zeit.localeCompare(K(b.kursId).zeit));
   }, [kurseById, overrides, profil.id, jahr, monatIndex, tageImMonat]);
 
   const vergangen = (l) => istVergangen(l.datum, K(l.kursId).zeit, K(l.kursId).dauer_min);
   const istVertretung = (l) => l.istLehrer && l.istLehrer !== l.sollLehrer;
   const unbest = (l) => l.status === "geplant" && vergangen(l) && l.istLehrer;
+  // Eigener Kurs, aber aktuell von einer anderen Person übernommen -- rein
+  // informativ (wer, wegen Musik/Absprache), keine Aktionen und kein
+  // Lohnbetrag: die Lektion und ihr Lohn gehören jetzt der übernehmenden Person.
+  const uebernommenVonAnderer = (l) => l.sollLehrer === profil.id && l.istLehrer && l.istLehrer !== profil.id;
+  const namePerson = (id) => lehrerNamen[id] || "—";
   const satz = (l) => {
-    if (!l.istLehrer) return 0;
+    if (!l.istLehrer || l.istLehrer !== profil.id) return 0;
     if (istVertretung(l)) return satzAmDatum(satzHistorie, profil.id, l.datum, "vertretungssatz");
     const k = K(l.kursId);
     return k.ansatz != null ? k.ansatz : satzAmDatum(satzHistorie, profil.id, l.datum, "satz");
@@ -401,16 +414,18 @@ export default function MeineStunden({ profil, session }) {
                   </span>
                   <strong style={{ fontSize: 14 }}>{k.bezeichnung}</strong>
                   <span style={{ fontSize: 12, color: C.inkSoft }}>
-                    {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′ · CHF {satz(l)}.–
+                    {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′
+                    {!uebernommenVonAnderer(l) && <> · CHF {satz(l)}.–</>}
                   </span>
-                  {istVertretung(l) && <Tag text="Vertretung" farbe={C.brass} />}
+                  {istVertretung(l) && l.istLehrer === profil.id && <Tag text="Vertretung" farbe={C.brass} />}
+                  {uebernommenVonAnderer(l) && <Tag text={`Übernommen von ${namePerson(l.istLehrer)}`} farbe={C.brass} />}
                   {l.status === "gehalten" && <Tag text="Gehalten" farbe={C.teal} />}
                   {l.status === "ausgefallen" && <Tag text={l.bemerkung || "Fällt aus"} farbe={C.muted} />}
                   {unbest(l) && <Tag text="Noch offen" farbe={C.rose} />}
                   {!l.istLehrer && <Tag text="Ausgetragen · Vertretung gesucht" farbe={C.rose} />}
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  {l.status === "geplant" && vergangen(l) && l.istLehrer && (
+                  {l.status === "geplant" && vergangen(l) && l.istLehrer === profil.id && (
                     <Knopf klein variante="voll" onClick={() => aendern(l, { status: "gehalten" })}>
                       Gehalten
                     </Knopf>
@@ -420,12 +435,12 @@ export default function MeineStunden({ profil, session }) {
                       Doch übernehmen
                     </Knopf>
                   )}
-                  {l.istLehrer && l.status !== "ausgefallen" && !vergangen(l) && (
+                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && !vergangen(l) && (
                     <Knopf klein variante="warn" onClick={() => aendern(l, { ist_lehrer: null })}>
                       Kann nicht
                     </Knopf>
                   )}
-                  {l.istLehrer && l.status !== "ausgefallen" && vergangen(l) && (
+                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && vergangen(l) && (
                     <Knopf klein variante="warn" onClick={() => aendern(l, { ist_lehrer: null, status: "geplant" })}>
                       Doch nicht gegeben
                     </Knopf>
