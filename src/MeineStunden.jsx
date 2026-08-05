@@ -212,6 +212,21 @@ export default function MeineStunden({ profil, session }) {
     }
   }
 
+  // Gibt einen zugewiesenen Anlass wieder frei (erscheint danach unter
+  // "Offene Stunden / Anlässe" zum Eintragen für alle). Anders als
+  // anlassAendern: die Liste hier zeigt nur "meine" Anlässe, ein
+  // freigegebener gehört nicht mehr dazu und muss verschwinden statt nur
+  // seinen Status zu aktualisieren.
+  async function anlassFreigeben(a) {
+    setAnlassFehler((prev) => ({ ...prev, [a.id]: null }));
+    setMeineAnlaesse((prev) => prev.filter((x) => x.id !== a.id));
+    const { error } = await supabase.from("anlaesse").update({ lehrer_id: null, status: "offen" }).eq("id", a.id);
+    if (error) {
+      setMeineAnlaesse((prev) => [...prev, a].sort((x, y) => x.datum.localeCompare(y.datum) || x.zeit.localeCompare(y.zeit)));
+      setAnlassFehler((prev) => ({ ...prev, [a.id]: error.message }));
+    }
+  }
+
   async function absenzMelden() {
     if (!absVon || !absBis) return;
     setAbsFehler("");
@@ -495,8 +510,8 @@ export default function MeineStunden({ profil, session }) {
                       </Knopf>
                     )}
                     {a.status !== "ausgefallen" && !anlassVergangen(a) && (
-                      <Knopf klein variante="warn" onClick={() => anlassAendern(a, { lehrer_id: null, status: "offen" })}>
-                        Absagen
+                      <Knopf klein variante="warn" onClick={() => anlassFreigeben(a)}>
+                        Wieder freigeben
                       </Knopf>
                     )}
                   </div>
