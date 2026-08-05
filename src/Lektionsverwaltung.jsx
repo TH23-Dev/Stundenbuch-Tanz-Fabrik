@@ -553,7 +553,7 @@ export default function Lektionsverwaltung({ session }) {
       {aktionFehler && <p style={{ color: C.rose, fontSize: 13, marginTop: -6, marginBottom: 14 }}>{aktionFehler}</p>}
 
       <div style={{ ...karteStil, marginBottom: 14, gap: 8, flexWrap: "wrap" }}>
-        <strong style={{ fontSize: 13 }}>Ferien</strong>
+        <strong style={{ fontSize: 13 }}>Ferien / Feiertage</strong>
         <select value={ferienOrt} onChange={(e) => setFerienOrt(e.target.value)} style={{ ...eingabeStil, width: "auto" }}>
           <option value="">Alle Standorte</option>
           {Object.entries(orte).map(([code, name2]) => (
@@ -573,15 +573,16 @@ export default function Lektionsverwaltung({ session }) {
           Rückgängig
         </Knopf>
         <span style={{ fontSize: 12, color: C.inkSoft }}>
-          Gestrichene Stunden werden nicht vergütet. Für jeden Standort einzeln wiederholbar, da nicht alle
-          gleichzeitig Ferien haben — auch über Monatsgrenzen hinweg. "Rückgängig" macht mit denselben Angaben
-          nur die hier gestrichenen Ferien-Lektionen wieder rückgängig.
+          Für einen einzelnen Feiertag einfach von = bis dasselbe Datum setzen. Gestrichene Stunden werden nicht
+          vergütet. Für jeden Standort einzeln wiederholbar, da nicht alle dieselben Ferien und Feiertage
+          haben — auch über Monatsgrenzen hinweg. "Rückgängig" macht mit denselben Angaben nur die hier
+          gestrichenen Lektionen wieder rückgängig.
         </span>
 
         {ferienGruppen.length > 0 && (
           <details style={{ width: "100%", marginTop: 4 }}>
             <summary style={{ fontSize: 12, color: C.inkSoft, cursor: "pointer" }}>
-              Ferien-Einträge im gewählten Monat ({ferienGruppen.length})
+              Ferien-/Feiertag-Einträge im gewählten Monat ({ferienGruppen.length})
             </summary>
             <table style={{ marginTop: 6 }}>
               <thead>
