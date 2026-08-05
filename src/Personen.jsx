@@ -137,21 +137,41 @@ export default function Personen() {
     setNeuePerson(LEER_NEUE_PERSON);
   }
 
-  // Aus eingefügtem Text (z.B. aus Excel kopiert, Tab- oder Komma-getrennt:
-  // "Nachname<Tab>Vorname" pro Zeile) eine Vorschau bauen. Zeilen ohne
-  // erkennbare zwei Teile (Notizen, Leerzeilen) werden stillschweigend
-  // übersprungen. Gegen die bestehende Liste abgeglichen, damit niemand
-  // versehentlich doppelt angelegt wird.
+  // Aus eingefügtem Text eine Vorschau bauen, eine Person pro Zeile. Drei
+  // Formate werden erkannt:
+  //   - Tab-getrennt "Nachname<Tab>Vorname" (Kopieren aus Excel, zwei Spalten)
+  //   - Komma-getrennt "Nachname,Vorname"
+  //   - frei getippt "Vorname Nachname" (ohne Tab/Komma -- letztes Wort gilt
+  //     als Nachname, alles davor als Vorname, für Mehrfach-Vornamen)
+  // Zeilen ohne erkennbare zwei Teile (Notizen, Leerzeilen) werden
+  // stillschweigend übersprungen. Gegen die bestehende Liste abgeglichen,
+  // damit niemand versehentlich doppelt angelegt wird.
   function importVorschauErstellen() {
     setImportErgebnis("");
     setImportFehler("");
     const bestehende = new Set(lehrerListe.map((p) => `${p.nachname.trim().toLowerCase()}|${p.vorname.trim().toLowerCase()}`));
     const gesehen = new Set();
     const zeilen = [];
-    importText.split(/\r?\n/).forEach((zeile, i) => {
-      const teile = zeile.includes("\t") ? zeile.split("\t") : zeile.split(",");
-      const nachname = (teile[0] || "").trim();
-      const vorname = (teile[1] || "").trim();
+    importText.split(/\r?\n/).forEach((zeileRoh, i) => {
+      const zeile = zeileRoh.trim();
+      if (!zeile) return;
+      let nachname = "";
+      let vorname = "";
+      if (zeile.includes("\t")) {
+        const teile = zeile.split("\t");
+        nachname = (teile[0] || "").trim();
+        vorname = (teile[1] || "").trim();
+      } else if (zeile.includes(",")) {
+        const teile = zeile.split(",");
+        nachname = (teile[0] || "").trim();
+        vorname = (teile[1] || "").trim();
+      } else {
+        const woerter = zeile.split(/\s+/);
+        if (woerter.length >= 2) {
+          nachname = woerter[woerter.length - 1];
+          vorname = woerter.slice(0, -1).join(" ");
+        }
+      }
       if (!nachname || !vorname) return;
       const key = `${nachname.toLowerCase()}|${vorname.toLowerCase()}`;
       if (gesehen.has(key)) return;
@@ -374,14 +394,15 @@ export default function Personen() {
               Mehrere Personen importieren
             </h3>
             <p style={{ color: C.inkSoft, fontSize: 13, marginTop: 0, marginBottom: 10 }}>
-              Aus Excel kopieren und hier einfügen: zwei Spalten, Nachname und Vorname (Tab- oder
-              Komma-getrennt), eine Person pro Zeile. Notizen oder unvollständige Zeilen werden beim
+              Eine Person pro Zeile, in einem dieser Formate: aus Excel kopiert (zwei Spalten Nachname/
+              Vorname, Tab-getrennt), "Nachname,Vorname" mit Komma, oder einfach frei getippt
+              "Vorname Nachname" (z.B. "Max Muster"). Notizen oder unvollständige Zeilen werden beim
               Erstellen der Vorschau automatisch übersprungen.
             </p>
             <textarea
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
-              placeholder={"Ammann\tBenjamin\nCehajic\tJasmin\n…"}
+              placeholder={"Ammann\tBenjamin\nCehajic\tJasmin\nMax Muster\n…"}
               rows={6}
               style={{ ...eingabeStil, width: "100%", fontFamily: "monospace", fontSize: 13, marginBottom: 10 }}
             />
