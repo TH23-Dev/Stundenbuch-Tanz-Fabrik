@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { C, eingabeStil } from "./theme";
 import { Tag, Knopf, karteStil } from "./ui";
-import { iso, wochentag, kw, monatsGrenzenFuer, aktuellerMonat, datumLabel, datumVoll, TAGE, istVergangen } from "./lib/datum";
+import { iso, wochentag, monatsGrenzenFuer, aktuellerMonat, datumLabel, datumVoll, TAGE, istVergangen } from "./lib/datum";
 import { std, chf } from "./lib/lohn";
 import { speichereLektionStatus, ladeAktuelleLektionen, ladeOffeneEigeneLektionen } from "./lib/lektionen";
 import { satzAmDatum } from "./lib/saetze";
@@ -26,7 +26,8 @@ export default function Lektionsverwaltung({ session }) {
 
   const [filterOrt, setFilterOrt] = useState("");
   const [filterLehrer, setFilterLehrer] = useState("");
-  const [ferienKw, setFerienKw] = useState("");
+  const [ferienVon, setFerienVon] = useState("");
+  const [ferienBis, setFerienBis] = useState("");
   const [ferienOrt, setFerienOrt] = useState("");
   const [pauseKursId, setPauseKursId] = useState("");
   const [pauseVon, setPauseVon] = useState("");
@@ -146,7 +147,6 @@ export default function Lektionsverwaltung({ session }) {
   const relevant = (l) => l.status === "gehalten" && !!l.istLehrer;
   const lohn = (l) => (relevant(l) ? stdFn(l) * satz(l) : 0);
 
-  const wochen = [...new Set(lektionen.map((l) => kw(l.datum)))].sort((a, b) => a - b);
   const gefiltert = lektionen.filter(
     (l) => (!filterOrt || K(l.kursId).standort_code === filterOrt) && (!filterLehrer || l.istLehrer === filterLehrer)
   );
@@ -175,28 +175,81 @@ export default function Lektionsverwaltung({ session }) {
     }
   }
 
+  // Streicht alle Lektionen eines (optional: aller) Standorte über einen
+  // frei wählbaren Zeitraum -- unabhängig vom aktuell angezeigten Monat, da
+  // Ferien über Monatsgrenzen hinausgehen können. Beliebig oft mit
+  // unterschiedlichem Standort/Zeitraum wiederholbar, da jeder Standort
+  // andere Ferienwochen hat.
   async function ferienSetzen() {
-    if (!ferienKw) return;
-    const betroffene = lektionen.filter(
-      (l) => kw(l.datum) === Number(ferienKw) && (!ferienOrt || K(l.kursId).standort_code === ferienOrt) && l.status !== "ausgefallen"
-    );
-    if (betroffene.length === 0) return;
+    if (!ferienVon || !ferienBis || ferienVon > ferienBis) return;
+    setAktionFehler("");
+
+    const betroffeneKurse = kurse.filter((k) => !ferienOrt || k.standort_code === ferienOrt);
+    if (betroffeneKurse.length === 0) {
+      setAktionFehler("Keine Kurse für diesen Standort gefunden.");
+      return;
+    }
+    const kurseByIdLokal = {};
+    betroffeneKurse.forEach((k) => (kurseByIdLokal[k.id] = k));
+
+    const termine = [];
+    for (let d = new Date(ferienVon + "T12:00"); d <= new Date(ferienBis + "T12:00"); d.setDate(d.getDate() + 1)) {
+      const datum = iso(d);
+      const wt = wochentag(d);
+      betroffeneKurse.forEach((k) => {
+        if (k.wochentag !== wt) return;
+        if (k.gueltig_von > datum) return;
+        if (k.gueltig_bis && k.gueltig_bis < datum) return;
+        termine.push({ kursId: k.id, datum });
+      });
+    }
+    if (termine.length === 0) {
+      setAktionFehler("Keine Lektionen im gewählten Zeitraum gefunden.");
+      return;
+    }
+
+    const { data: bestehende, error: ladeErr } = await supabase
+      .from("lektion_status")
+      .select("kurs_id,datum,ist_lehrer,status")
+      .in("kurs_id", betroffeneKurse.map((k) => k.id))
+      .gte("datum", ferienVon)
+      .lte("datum", ferienBis);
+    if (ladeErr) {
+      setAktionFehler(ladeErr.message);
+      return;
+    }
+    const bestehendeMap = {};
+    (bestehende || []).forEach((s) => (bestehendeMap[`${s.kurs_id}|${s.datum}`] = s));
+
+    const betroffene = termine
+      .filter(({ kursId, datum }) => (bestehendeMap[`${kursId}|${datum}`]?.status || "geplant") !== "ausgefallen")
+      .map(({ kursId, datum }) => ({
+        kursId,
+        datum,
+        istLehrer: bestehendeMap[`${kursId}|${datum}`] ? bestehendeMap[`${kursId}|${datum}`].ist_lehrer : kurseByIdLokal[kursId].lehrer_id,
+      }));
+
+    if (betroffene.length === 0) {
+      setAktionFehler("Alle Lektionen in diesem Zeitraum sind bereits als ausgefallen markiert.");
+      return;
+    }
+
     setOverrides((prev) => {
       const next = { ...prev };
-      betroffene.forEach((l) => {
-        next[l.id] = { ist_lehrer: l.istLehrer, status: "ausgefallen", bemerkung: "Ferienwoche" };
+      betroffene.forEach(({ kursId, datum, istLehrer }) => {
+        if (datum >= von && datum <= bis) next[`${kursId}|${datum}`] = { ist_lehrer: istLehrer, status: "ausgefallen", bemerkung: "Ferien" };
       });
       return next;
     });
-    setAktionFehler("");
+
     const ergebnisse = await Promise.all(
-      betroffene.map((l) =>
+      betroffene.map(({ kursId, datum, istLehrer }) =>
         speichereLektionStatus(supabase, {
-          kursId: l.kursId,
-          datum: l.datum,
-          istLehrer: l.istLehrer,
+          kursId,
+          datum,
+          istLehrer,
           status: "ausgefallen",
-          bemerkung: "Ferienwoche",
+          bemerkung: "Ferien",
           geaendertVon: session.user.id,
         })
       )
@@ -204,6 +257,9 @@ export default function Lektionsverwaltung({ session }) {
     const fehlgeschlagen = ergebnisse.filter((r) => r.error).length;
     if (fehlgeschlagen) {
       setAktionFehler(`${fehlgeschlagen} von ${betroffene.length} Lektionen konnten nicht gestrichen werden.`);
+    } else {
+      setFerienVon("");
+      setFerienBis("");
     }
   }
 
@@ -398,16 +454,8 @@ export default function Lektionsverwaltung({ session }) {
       {aktionFehler && <p style={{ color: C.rose, fontSize: 13, marginTop: -6, marginBottom: 14 }}>{aktionFehler}</p>}
 
       <div style={{ ...karteStil, marginBottom: 14, gap: 8, flexWrap: "wrap" }}>
-        <strong style={{ fontSize: 13 }}>Ferienwoche</strong>
-        <select value={ferienKw} onChange={(e) => setFerienKw(e.target.value)} style={{ ...eingabeStil, width: "auto" }} disabled={monatGesperrt}>
-          <option value="">KW …</option>
-          {wochen.map((w) => (
-            <option key={w} value={w}>
-              KW {w}
-            </option>
-          ))}
-        </select>
-        <select value={ferienOrt} onChange={(e) => setFerienOrt(e.target.value)} style={{ ...eingabeStil, width: "auto" }} disabled={monatGesperrt}>
+        <strong style={{ fontSize: 13 }}>Ferien</strong>
+        <select value={ferienOrt} onChange={(e) => setFerienOrt(e.target.value)} style={{ ...eingabeStil, width: "auto" }}>
           <option value="">Alle Standorte</option>
           {Object.entries(orte).map(([code, name2]) => (
             <option key={code} value={code}>
@@ -415,10 +463,17 @@ export default function Lektionsverwaltung({ session }) {
             </option>
           ))}
         </select>
-        <Knopf onClick={ferienSetzen} disabled={monatGesperrt || !ferienKw}>
+        <span style={{ fontSize: 12, color: C.inkSoft }}>von</span>
+        <input type="date" value={ferienVon} onChange={(e) => setFerienVon(e.target.value)} style={{ ...eingabeStil, width: "auto" }} />
+        <span style={{ fontSize: 12, color: C.inkSoft }}>bis</span>
+        <input type="date" value={ferienBis} onChange={(e) => setFerienBis(e.target.value)} style={{ ...eingabeStil, width: "auto" }} />
+        <Knopf onClick={ferienSetzen} disabled={!ferienVon || !ferienBis}>
           Stunden streichen
         </Knopf>
-        <span style={{ fontSize: 12, color: C.inkSoft }}>Gestrichene Stunden werden nicht vergütet.</span>
+        <span style={{ fontSize: 12, color: C.inkSoft }}>
+          Gestrichene Stunden werden nicht vergütet. Für jeden Standort einzeln wiederholbar, da nicht alle
+          gleichzeitig Ferien haben — auch über Monatsgrenzen hinweg.
+        </span>
       </div>
 
       <div style={{ ...karteStil, marginBottom: 14, gap: 8, flexWrap: "wrap" }}>
