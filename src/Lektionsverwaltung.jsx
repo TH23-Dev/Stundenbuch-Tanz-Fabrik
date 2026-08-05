@@ -786,7 +786,7 @@ export default function Lektionsverwaltung({ session }) {
                     </select>
                     {istVertretung(l) && (
                       <span style={{ marginLeft: 6 }}>
-                        <Tag text="Vertr." farbe={C.brass} />
+                        <Tag text={`Vertr. für ${P(l.sollLehrer) ? `${P(l.sollLehrer).vorname} ${P(l.sollLehrer).nachname}` : "—"}`} farbe={C.brass} />
                       </span>
                     )}
                   </td>

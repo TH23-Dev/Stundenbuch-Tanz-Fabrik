@@ -451,7 +451,7 @@ export default function MeineStunden({ profil, session }) {
                     {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′
                     {!uebernommenVonAnderer(l) && <> · CHF {satz(l)}.–</>}
                   </span>
-                  {istVertretung(l) && l.istLehrer === profil.id && <Tag text="Vertretung" farbe={C.brass} />}
+                  {istVertretung(l) && l.istLehrer === profil.id && <Tag text={`Vertretung für ${namePerson(l.sollLehrer)}`} farbe={C.brass} />}
                   {uebernommenVonAnderer(l) && <Tag text={`Übernommen von ${namePerson(l.istLehrer)}`} farbe={C.brass} />}
                   {l.status === "gehalten" && <Tag text="Gehalten" farbe={C.teal} />}
                   {l.status === "ausgefallen" && <Tag text={l.bemerkung || "Fällt aus"} farbe={C.muted} />}
