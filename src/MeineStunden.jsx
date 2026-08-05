@@ -241,7 +241,7 @@ export default function MeineStunden({ profil, session }) {
       setAbsMeldung(
         fehlgeschlagen
           ? `${erfolgreich} von ${betroffene.length} Stunde(n) freigegeben, ${fehlgeschlagen} fehlgeschlagen.`
-          : `${betroffene.length} Stunde(n) freigegeben. Sie erscheinen jetzt unter «Offene Stunden».`
+          : `${betroffene.length} Stunde(n) freigegeben. Sie erscheinen jetzt unter «Offene Stunden / Anlässe».`
       );
       if (erfolgreich > 0) {
         const { data: protokoll, error: protokollErr } = await protokolliereAbwesenheit(supabase, {

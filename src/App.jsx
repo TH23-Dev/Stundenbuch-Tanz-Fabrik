@@ -58,7 +58,7 @@ export default function App() {
   const optionen = [];
   if (profil?.r_lehrer) {
     optionen.push({ value: "lehrer", label: "Meine Stunden" });
-    optionen.push({ value: "offen", label: "Offene Stunden" });
+    optionen.push({ value: "offen", label: "Offene Stunden / Anlässe" });
   }
   if (profil?.r_lohn || profil?.r_admin) {
     optionen.push({ value: "backoffice", label: "Abrechnung" });

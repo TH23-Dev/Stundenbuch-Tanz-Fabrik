@@ -156,12 +156,12 @@ export default function OffeneStunden({ profil, session }) {
   }
 
   if (laden) return <p style={{ color: C.inkSoft }}>Lade offene Stunden …</p>;
-  if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Offene Stunden konnten nicht geladen werden: {ladeFehler}</p>;
+  if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Offene Stunden / Anlässe konnten nicht geladen werden: {ladeFehler}</p>;
 
   return (
     <div>
       <h2 className="display" style={{ fontSize: 21, margin: "0 0 6px" }}>
-        Offene Stunden
+        Offene Stunden / Anlässe
       </h2>
       <p style={{ color: C.inkSoft, fontSize: 13, marginTop: 0, marginBottom: 16 }}>
         Vertretungen werden mit deinem persönlichen Vertretungssatz von CHF {profil.vertretungssatz}.– pro
