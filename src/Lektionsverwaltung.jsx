@@ -151,6 +151,24 @@ export default function Lektionsverwaltung({ session }) {
     (l) => (!filterOrt || K(l.kursId).standort_code === filterOrt) && (!filterLehrer || l.istLehrer === filterLehrer)
   );
 
+  // Sichtbare Übersicht der per "Ferien" gestrichenen Lektionen im gewählten
+  // Monat, gruppiert pro Standort (früheste bis späteste betroffene
+  // Lektion) -- sonst ist ein Ferien-Eintrag nirgends einsehbar, ausser man
+  // sucht ihn Zeile für Zeile in "Alle Lektionen".
+  const ferienGruppen = useMemo(() => {
+    const eintraege = lektionen.filter((l) => l.status === "ausgefallen" && l.bemerkung === "Ferien");
+    const gruppen = {};
+    eintraege.forEach((l) => {
+      const ort = K(l.kursId).standort_code;
+      if (!gruppen[ort]) gruppen[ort] = { ort, von: l.datum, bis: l.datum, lektionen: [] };
+      const g = gruppen[ort];
+      if (l.datum < g.von) g.von = l.datum;
+      if (l.datum > g.bis) g.bis = l.datum;
+      g.lektionen.push({ kursId: l.kursId, datum: l.datum, istLehrer: l.istLehrer });
+    });
+    return Object.values(gruppen).sort((a, b) => a.von.localeCompare(b.von));
+  }, [lektionen, kurseById]);
+
   async function aendern(l, changes) {
     const key = l.id;
     const vorher = overrides[key];
@@ -319,6 +337,28 @@ export default function Lektionsverwaltung({ session }) {
     } else {
       setFerienVon("");
       setFerienBis("");
+    }
+  }
+
+  // Rückgängig direkt aus der sichtbaren Liste heraus: nutzt die schon
+  // bekannten kursId/datum-Paare der Gruppe statt Von/Bis erneut abzufragen.
+  async function ferienGruppeRueckgaengig(gruppe) {
+    setAktionFehler("");
+    setOverrides((prev) => {
+      const next = { ...prev };
+      gruppe.lektionen.forEach(({ kursId, datum, istLehrer }) => {
+        next[`${kursId}|${datum}`] = { ist_lehrer: istLehrer, status: "geplant", bemerkung: "" };
+      });
+      return next;
+    });
+    const ergebnisse = await Promise.all(
+      gruppe.lektionen.map(({ kursId, datum, istLehrer }) =>
+        speichereLektionStatus(supabase, { kursId, datum, istLehrer, status: "geplant", bemerkung: "", geaendertVon: session.user.id })
+      )
+    );
+    const fehlgeschlagen = ergebnisse.filter((r) => r.error).length;
+    if (fehlgeschlagen) {
+      setAktionFehler(`${fehlgeschlagen} von ${gruppe.lektionen.length} Lektionen konnten nicht reaktiviert werden.`);
     }
   }
 
@@ -537,6 +577,40 @@ export default function Lektionsverwaltung({ session }) {
           gleichzeitig Ferien haben — auch über Monatsgrenzen hinweg. "Rückgängig" macht mit denselben Angaben
           nur die hier gestrichenen Ferien-Lektionen wieder rückgängig.
         </span>
+
+        {ferienGruppen.length > 0 && (
+          <details style={{ width: "100%", marginTop: 4 }}>
+            <summary style={{ fontSize: 12, color: C.inkSoft, cursor: "pointer" }}>
+              Ferien-Einträge im gewählten Monat ({ferienGruppen.length})
+            </summary>
+            <table style={{ marginTop: 6 }}>
+              <thead>
+                <tr>
+                  <th>Standort</th>
+                  <th>Zeitraum</th>
+                  <th>Lektionen</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {ferienGruppen.map((g) => (
+                  <tr key={g.ort}>
+                    <td>{orte[g.ort] || g.ort}</td>
+                    <td className="mono">
+                      {datumVoll(g.von)} – {datumVoll(g.bis)}
+                    </td>
+                    <td className="mono">{g.lektionen.length}</td>
+                    <td>
+                      <Knopf klein onClick={() => ferienGruppeRueckgaengig(g)}>
+                        Rückgängig
+                      </Knopf>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        )}
       </div>
 
       <div style={{ ...karteStil, marginBottom: 14, gap: 8, flexWrap: "wrap" }}>
