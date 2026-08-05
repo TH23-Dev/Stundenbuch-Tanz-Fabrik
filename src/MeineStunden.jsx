@@ -292,6 +292,15 @@ export default function MeineStunden({ profil, session }) {
     stundenZurueckholen(absVon, absBis, { formZuruecksetzen: true });
   }
 
+  // Macht eine Abwesenheit rückgängig und füllt das Formular direkt mit
+  // ihrem Zeitraum vor, damit man nur noch das korrigieren muss, was falsch
+  // war, statt sich Von/Bis selbst merken zu müssen.
+  function absenzBearbeiten(a) {
+    stundenZurueckholen(a.von, a.bis);
+    setAbsVon(a.von);
+    setAbsBis(a.bis);
+  }
+
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Stunden …</p>;
   if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Stunden konnten nicht geladen werden: {ladeFehler}</p>;
 
@@ -339,7 +348,10 @@ export default function MeineStunden({ profil, session }) {
                     <td className="mono" style={{ color: C.inkSoft }}>
                       {datumVoll(a.erfasst_am.slice(0, 10))}
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <Knopf klein disabled={absLaeuft} onClick={() => absenzBearbeiten(a)}>
+                        Bearbeiten
+                      </Knopf>
                       <Knopf klein disabled={absLaeuft} onClick={() => stundenZurueckholen(a.von, a.bis)}>
                         Rückgängig
                       </Knopf>

@@ -372,6 +372,16 @@ export default function Lektionsverwaltung({ session }) {
     stundenZurueckholen(absLehrerId, absVon, absBis, { formZuruecksetzen: true });
   }
 
+  // Macht eine Abwesenheit rückgängig und füllt das Formular direkt mit
+  // Person und Zeitraum vor, damit man nur noch das korrigieren muss, was
+  // falsch war, statt Von/Bis selbst neu heraussuchen zu müssen.
+  function absenzBearbeiten(a) {
+    stundenZurueckholen(a.lehrer_id, a.von, a.bis);
+    setAbsLehrerId(a.lehrer_id);
+    setAbsVon(a.von);
+    setAbsBis(a.bis);
+  }
+
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Lektionen …</p>;
   if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Lektionen konnten nicht geladen werden: {ladeFehler}</p>;
 
@@ -477,7 +487,10 @@ export default function Lektionsverwaltung({ session }) {
                     <td className="mono" style={{ color: C.inkSoft }}>
                       {datumVoll(a.erfasst_am.slice(0, 10))}
                     </td>
-                    <td>
+                    <td style={{ display: "flex", gap: 6 }}>
+                      <Knopf klein disabled={absLaeuft} onClick={() => absenzBearbeiten(a)}>
+                        Bearbeiten
+                      </Knopf>
                       <Knopf klein disabled={absLaeuft} onClick={() => stundenZurueckholen(a.lehrer_id, a.von, a.bis)}>
                         Rückgängig
                       </Knopf>
