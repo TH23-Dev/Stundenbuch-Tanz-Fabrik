@@ -4,7 +4,7 @@ import { C, eingabeStil } from "./theme";
 import { Knopf, karteStil, Tag } from "./ui";
 import { iso } from "./lib/datum";
 
-const LEHRER_FELDER = "id,vorname,nachname,email,satz,vertretungssatz,r_lehrer,r_anlaesse,r_lohn,r_admin,aktiv";
+const LEHRER_FELDER = "id,vorname,nachname,email,satz,vertretungssatz,r_lehrer,r_anlaesse,r_lohn,r_admin,aktiv,user_id";
 const LEER_NEUE_PERSON = { vorname: "", nachname: "", email: "", satz: 60, vertretungssatz: 60 };
 
 export default function Personen() {
@@ -255,6 +255,7 @@ export default function Personen() {
               <th>Lohn</th>
               <th>Admin</th>
               <th>Kurse</th>
+              <th>App-Zugang</th>
               <th>Status</th>
             </tr>
           </thead>
@@ -326,6 +327,15 @@ export default function Personen() {
                 </td>
                 <td className="mono" style={{ color: C.inkSoft }}>
                   {kursAnzahl[p.id] || 0}
+                </td>
+                <td>
+                  {p.user_id ? (
+                    <Tag text="Aktiviert" farbe={C.teal} />
+                  ) : p.email ? (
+                    <Tag text="Noch nicht aktiviert" farbe={C.brass} />
+                  ) : (
+                    <Tag text="Keine E-Mail" farbe={C.muted} />
+                  )}
                 </td>
                 <td>
                   <Knopf klein variante={p.aktiv ? "still" : "voll"} onClick={() => feldUmschalten(p, "aktiv")}>
