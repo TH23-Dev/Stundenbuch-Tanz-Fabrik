@@ -147,8 +147,14 @@ export default function Lektionsverwaltung({ session }) {
   const relevant = (l) => l.status === "gehalten" && !!l.istLehrer;
   const lohn = (l) => (relevant(l) ? stdFn(l) * satz(l) : 0);
 
+  // Der Lehrer-Filter zeigt sowohl Lektionen, die diese Person aktuell hält,
+  // als auch Lektionen ihrer eigenen Kurse, die gerade offen oder von jemand
+  // anderem übernommen sind -- sonst verschwindet z.B. eine wegen
+  // Abwesenheit freigegebene Lektion beim Filtern komplett aus der Ansicht.
   const gefiltert = lektionen.filter(
-    (l) => (!filterOrt || K(l.kursId).standort_code === filterOrt) && (!filterLehrer || l.istLehrer === filterLehrer)
+    (l) =>
+      (!filterOrt || K(l.kursId).standort_code === filterOrt) &&
+      (!filterLehrer || l.istLehrer === filterLehrer || l.sollLehrer === filterLehrer)
   );
 
   // Sichtbare Übersicht der per "Ferien" gestrichenen Lektionen im gewählten
@@ -556,6 +562,24 @@ export default function Lektionsverwaltung({ session }) {
     setAbsBis(a.bis);
   }
 
+  // Für einen falsch eingegebenen Eintrag (z.B. falsches Datum): holt zuerst
+  // best-effort noch offene eigene Stunden zurück, löscht den
+  // Protokolleintrag danach aber in jedem Fall -- anders als "Rückgängig"
+  // bleibt er nicht stehen, nur weil nichts (mehr) zum Zurückholen da war.
+  async function abwesenheitLoeschen(a) {
+    const name = P(a.lehrer_id) ? `${P(a.lehrer_id).vorname} ${P(a.lehrer_id).nachname}` : "diese Person";
+    if (!window.confirm(`Abwesenheit ${datumVoll(a.von)} – ${datumVoll(a.bis)} für ${name} wirklich löschen?`)) return;
+    await stundenZurueckholen(a.lehrer_id, a.von, a.bis);
+    setAktionFehler("");
+    const vorher = abwesenheitenHistorie;
+    setAbwesenheitenHistorie((prev) => prev.filter((x) => x.id !== a.id));
+    const { error } = await supabase.from("abwesenheiten").delete().eq("id", a.id);
+    if (error) {
+      setAbwesenheitenHistorie(vorher);
+      setAktionFehler(`Löschen fehlgeschlagen: ${error.message}`);
+    }
+  }
+
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Lektionen …</p>;
   if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Lektionen konnten nicht geladen werden: {ladeFehler}</p>;
 
@@ -672,7 +696,10 @@ export default function Lektionsverwaltung({ session }) {
         <Knopf onClick={absenzRueckgaengig} disabled={absLaeuft || !absLehrerId || !absVon || !absBis}>
           Rückgängig
         </Knopf>
-        <span style={{ fontSize: 12, color: C.inkSoft }}>Künftige Stunden dieser Person im Zeitraum werden freigegeben.</span>
+        <span style={{ fontSize: 12, color: C.inkSoft }}>
+          Künftige Stunden dieser Person im Zeitraum werden freigegeben. Nach "Bearbeiten" hier den Zeitraum
+          korrigieren und nochmals auf "Stunden freigeben" klicken, um die Korrektur zu speichern.
+        </span>
         {absMeldung && <span style={{ fontSize: 12, color: C.teal, width: "100%" }}>{absMeldung}</span>}
 
         {abwesenheitenHistorie.length > 0 && (
@@ -699,12 +726,15 @@ export default function Lektionsverwaltung({ session }) {
                     <td className="mono" style={{ color: C.inkSoft }}>
                       {datumVoll(a.erfasst_am.slice(0, 10))}
                     </td>
-                    <td style={{ display: "flex", gap: 6 }}>
+                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <Knopf klein disabled={absLaeuft} onClick={() => absenzBearbeiten(a)}>
                         Bearbeiten
                       </Knopf>
                       <Knopf klein disabled={absLaeuft} onClick={() => abwesenheitAusHistorieEntfernen(a)}>
                         Rückgängig
+                      </Knopf>
+                      <Knopf klein variante="warn" disabled={absLaeuft} onClick={() => abwesenheitLoeschen(a)}>
+                        Löschen
                       </Knopf>
                     </td>
                   </tr>

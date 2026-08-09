@@ -20,4 +20,9 @@ create policy lesen on abwesenheiten for select to authenticated
 create policy schreiben on abwesenheiten for insert to authenticated
   with check (darf_lohn() or lehrer_id = meine_lehrer_id());
 
+-- Für einen falsch eingegebenen Eintrag (z.B. falsches Datum): den Protokoll-
+-- eintrag selbst löschen können, nicht nur die Lektionen zurückholen.
+create policy loeschen on abwesenheiten for delete to authenticated
+  using (darf_lohn() or lehrer_id = meine_lehrer_id());
+
 create index on abwesenheiten (lehrer_id, erfasst_am);

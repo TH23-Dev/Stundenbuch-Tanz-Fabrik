@@ -348,6 +348,23 @@ export default function MeineStunden({ profil, session }) {
     setAbsBis(a.bis);
   }
 
+  // Für einen falsch eingegebenen Eintrag (z.B. falsches Datum): holt zuerst
+  // best-effort noch offene eigene Stunden zurück, löscht den
+  // Protokolleintrag danach aber in jedem Fall -- anders als "Rückgängig"
+  // bleibt er nicht stehen, nur weil nichts (mehr) zum Zurückholen da war.
+  async function abwesenheitLoeschen(a) {
+    if (!window.confirm(`Abwesenheit ${datumVoll(a.von)} – ${datumVoll(a.bis)} wirklich löschen?`)) return;
+    await stundenZurueckholen(a.von, a.bis);
+    setAbsFehler("");
+    const vorher = abwesenheitenHistorie;
+    setAbwesenheitenHistorie((prev) => prev.filter((x) => x.id !== a.id));
+    const { error } = await supabase.from("abwesenheiten").delete().eq("id", a.id);
+    if (error) {
+      setAbwesenheitenHistorie(vorher);
+      setAbsFehler(`Löschen fehlgeschlagen: ${error.message}`);
+    }
+  }
+
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Stunden …</p>;
   if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Stunden konnten nicht geladen werden: {ladeFehler}</p>;
 
@@ -369,7 +386,10 @@ export default function MeineStunden({ profil, session }) {
         <Knopf onClick={absenzRueckgaengig} disabled={absLaeuft || !absVon || !absBis}>
           Rückgängig
         </Knopf>
-        <span style={{ fontSize: 12, color: C.inkSoft }}>Alle deine künftigen Stunden im Zeitraum werden für Vertretungen freigegeben.</span>
+        <span style={{ fontSize: 12, color: C.inkSoft }}>
+          Alle deine künftigen Stunden im Zeitraum werden für Vertretungen freigegeben. Nach "Bearbeiten" hier den
+          Zeitraum korrigieren und nochmals auf "Stunden freigeben" klicken, um die Korrektur zu speichern.
+        </span>
         {absMeldung && <span style={{ fontSize: 12, color: C.teal, width: "100%" }}>{absMeldung}</span>}
         {absFehler && <span style={{ fontSize: 12, color: C.rose, width: "100%" }}>{absFehler}</span>}
 
@@ -395,12 +415,15 @@ export default function MeineStunden({ profil, session }) {
                     <td className="mono" style={{ color: C.inkSoft }}>
                       {datumVoll(a.erfasst_am.slice(0, 10))}
                     </td>
-                    <td style={{ display: "flex", gap: 6 }}>
+                    <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                       <Knopf klein disabled={absLaeuft} onClick={() => absenzBearbeiten(a)}>
                         Bearbeiten
                       </Knopf>
                       <Knopf klein disabled={absLaeuft} onClick={() => abwesenheitAusHistorieEntfernen(a)}>
                         Rückgängig
+                      </Knopf>
+                      <Knopf klein variante="warn" disabled={absLaeuft} onClick={() => abwesenheitLoeschen(a)}>
+                        Löschen
                       </Knopf>
                     </td>
                   </tr>
