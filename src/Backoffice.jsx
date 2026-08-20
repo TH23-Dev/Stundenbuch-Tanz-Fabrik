@@ -49,7 +49,7 @@ export default function Backoffice({ session }) {
         { data: anlaesseData, error: e8 },
       ] = await Promise.all([
         supabase.from("standorte").select("code,name"),
-        supabase.from("lehrer").select(LEHRER_FELDER),
+        supabase.from("lehrer").select(LEHRER_FELDER).order("nachname"),
         supabase.from("kurse").select(KURS_FELDER),
         supabase.from("lektion_status").select("kurs_id,datum,ist_lehrer,status,bemerkung").gte("datum", von).lte("datum", bis),
         supabase.from("zusatzpositionen").select("id,lehrer_id,typ,betrag,bemerkung").eq("monat", monat),

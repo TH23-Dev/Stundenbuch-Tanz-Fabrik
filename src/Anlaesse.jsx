@@ -65,6 +65,18 @@ export default function Anlaesse() {
     }
   }
 
+  async function anlassLoeschen(a) {
+    if (!window.confirm(`Anlass "${a.titel}" vom ${datumLabel(a.datum)} wirklich löschen?\n\nEin bereits bestätigter Anlass verschwindet damit auch aus der Abrechnung, falls der Monat noch offen ist.`)) return;
+    setAktionFehler("");
+    const vorher = anlaesseListe;
+    setAnlaesseListe((prev) => prev.filter((x) => x.id !== a.id));
+    const { error } = await supabase.from("anlaesse").delete().eq("id", a.id);
+    if (error) {
+      setAnlaesseListe(vorher);
+      setAktionFehler(error.message);
+    }
+  }
+
   async function anlassHinzufuegen() {
     if (!neuerAnlass.titel || !neuerAnlass.ort) return;
     setAktionFehler("");
@@ -215,7 +227,7 @@ export default function Anlaesse() {
                     <Tag text="Geplant" farbe={C.muted} />
                   )}
                 </td>
-                <td>
+                <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                   {a.status === "ausgefallen" ? (
                     <Knopf klein onClick={() => anlassAendern(a, { status: a.lehrer_id ? "geplant" : "offen" })}>
                       Reaktivieren
@@ -225,6 +237,9 @@ export default function Anlaesse() {
                       Fällt aus
                     </Knopf>
                   )}
+                  <Knopf klein variante="warn" onClick={() => anlassLoeschen(a)}>
+                    Löschen
+                  </Knopf>
                 </td>
               </tr>
             ))}

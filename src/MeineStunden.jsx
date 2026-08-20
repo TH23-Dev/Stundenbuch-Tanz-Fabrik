@@ -502,6 +502,16 @@ export default function MeineStunden({ profil, session }) {
                       Doch nicht gegeben
                     </Knopf>
                   )}
+                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && (
+                    <Knopf klein variante="warn" onClick={() => aendern(l, { status: "ausgefallen", bemerkung: "Ausfall" })}>
+                      Fällt aus
+                    </Knopf>
+                  )}
+                  {l.istLehrer === profil.id && l.status === "ausgefallen" && (
+                    <Knopf klein onClick={() => aendern(l, { status: "geplant", bemerkung: "" })}>
+                      Reaktivieren
+                    </Knopf>
+                  )}
                 </div>
               </div>
               {speichernFehler[l.id] && (

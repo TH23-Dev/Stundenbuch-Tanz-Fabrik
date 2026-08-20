@@ -17,6 +17,7 @@ export default function Kurse() {
   const [lehrpersonen, setLehrpersonen] = useState([]);
   const [neuerKurs, setNeuerKurs] = useState(LEER_NEUER_KURS);
   const [neuerStandort, setNeuerStandort] = useState({ code: "", name: "" });
+  const [zeigeBeendete, setZeigeBeendete] = useState(false);
 
   useEffect(() => {
     let aktiv = true;
@@ -124,6 +125,11 @@ export default function Kurse() {
 
       {aktionFehler && <p style={{ color: C.rose, fontSize: 13, marginBottom: 14 }}>{aktionFehler}</p>}
 
+      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: C.inkSoft, marginBottom: 8, cursor: "pointer" }}>
+        <input type="checkbox" checked={zeigeBeendete} onChange={(e) => setZeigeBeendete(e.target.checked)} />
+        Beendete Kurse auch anzeigen ({kurse.filter((k) => k.gueltig_bis && k.gueltig_bis <= heute).length})
+      </label>
+
       <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, maxHeight: 560, overflow: "auto", marginBottom: 20 }}>
         <table>
           <thead>
@@ -141,7 +147,7 @@ export default function Kurse() {
             </tr>
           </thead>
           <tbody>
-            {kurse.map((k) => {
+            {kurse.filter((k) => zeigeBeendete || !k.gueltig_bis || k.gueltig_bis > heute).map((k) => {
               const beendet = k.gueltig_bis && k.gueltig_bis <= heute;
               return (
                 <tr key={k.id} style={{ opacity: beendet ? 0.45 : 1 }}>
