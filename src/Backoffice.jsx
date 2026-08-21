@@ -6,6 +6,7 @@ import { iso, wochentag, monatsGrenzenFuer, aktuellerMonat, datumLabel, datumVol
 import { std, chf } from "./lib/lohn";
 import { satzAmDatum } from "./lib/saetze";
 import { anlassRelevant } from "./lib/anlaesse";
+import { speichereLektionStatus } from "./lib/lektionen";
 
 const KURS_FELDER = "id,wochentag,zeit,dauer_min,bezeichnung,standort_code,lehrer_id,ansatz,gueltig_von,gueltig_bis";
 const LEHRER_FELDER = "id,vorname,nachname,satz,vertretungssatz,aktiv,r_lehrer";
@@ -174,13 +175,16 @@ export default function Backoffice({ session }) {
           const unbestCount = lektionen.filter((l) => l.istLehrer === p.id && unbest(l)).length;
           return { p, stdNormal: sum(norm), stdVert: sum(vert), lohnStd, zusatz, unbest: unbestCount, total: lohnStd + zusatz };
         })
-        .filter((a) => a.stdNormal + a.stdVert !== 0 || a.zusatz !== 0),
+        // Wer nur unbestätigte Lektionen hat (noch nichts Bezahltes, keine
+        // Zusatzposition), muss trotzdem in der Liste erscheinen -- sonst
+        // sieht Backoffice diese Person hier gar nicht und "Unbestätigt"
+        // weiter oben würde sie auch nicht mitzählen.
+        .filter((a) => a.stdNormal + a.stdVert !== 0 || a.zusatz !== 0 || a.unbest !== 0),
     [lehrerListe, lektionen, alleZusatz]
   );
 
   const totalLohn = auswertung.reduce((s, a) => s + a.total, 0);
   const offeneCount = lektionen.filter((l) => !l.istLehrer && l.status !== "ausgefallen").length;
-  const unbestGesamt = auswertung.reduce((s, a) => s + a.unbest, 0);
   const unbestaetigteListe = useMemo(
     () =>
       lektionen
@@ -189,6 +193,37 @@ export default function Backoffice({ session }) {
         .sort((a, b) => a.datum.localeCompare(b.datum) || a.kurs.zeit.localeCompare(b.kurs.zeit)),
     [lektionen]
   );
+  // Direkt aus der Liste berechnet statt aus auswertung() summiert -- so
+  // bleibt die Zahl immer exakt, unabhängig davon, wer sonst noch in der
+  // Auswertungstabelle auftaucht.
+  const unbestGesamt = unbestaetigteListe.length;
+
+  // Direktes Bearbeiten aus der Unbestätigt-Liste heraus (Ist-Lehrer
+  // umverteilen, als Gehalten bestätigen) -- gleiches Vorgehen wie in der
+  // Lektionsverwaltung, hier aber gleich in der Kontroll-Ansicht selbst.
+  async function lektionAendern(l, changes) {
+    const key = l.id;
+    const vorher = overrides[key];
+    const neu = {
+      ist_lehrer: "ist_lehrer" in changes ? changes.ist_lehrer : l.istLehrer,
+      status: "status" in changes ? changes.status : l.status,
+      bemerkung: "bemerkung" in changes ? changes.bemerkung : l.bemerkung,
+    };
+    setOverrides((prev) => ({ ...prev, [key]: neu }));
+    setAktionFehler("");
+    const { error } = await speichereLektionStatus(supabase, {
+      kursId: l.kursId,
+      datum: l.datum,
+      istLehrer: neu.ist_lehrer,
+      status: neu.status,
+      bemerkung: neu.bemerkung,
+      geaendertVon: session.user.id,
+    });
+    if (error) {
+      setOverrides((prev) => ({ ...prev, [key]: vorher }));
+      setAktionFehler(`Änderung an ${datumLabel(l.datum)} ${K(l.kursId).bezeichnung} fehlgeschlagen: ${error.message}`);
+    }
+  }
 
   async function zusatzHinzufuegen() {
     if (!neueZusatz.betrag || !neueZusatz.lehrerId) return;
@@ -381,14 +416,16 @@ export default function Backoffice({ session }) {
       </div>
 
       {zeigeUnbestaetigt && unbestaetigteListe.length > 0 && (
-        <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, overflow: "auto", marginBottom: 16, maxHeight: 300 }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, overflow: "auto", marginBottom: 16, maxHeight: 340 }}>
           <table>
             <thead>
               <tr>
                 <th>Datum</th>
                 <th>Kurs</th>
                 <th>Standort</th>
-                <th>Lehrperson</th>
+                <th>Ursprungslehrer</th>
+                <th>Ist-Lehrer</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -399,7 +436,27 @@ export default function Backoffice({ session }) {
                   </td>
                   <td>{l.kurs.bezeichnung}</td>
                   <td style={{ color: C.inkSoft }}>{orte[l.kurs.standort_code] || l.kurs.standort_code}</td>
-                  <td>{name(l.istLehrer)}</td>
+                  <td style={{ color: C.inkSoft }}>{name(l.sollLehrer)}</td>
+                  <td>
+                    <select
+                      value={l.istLehrer || ""}
+                      onChange={(e) => lektionAendern(l, { ist_lehrer: e.target.value || null })}
+                      style={{ ...eingabeStil, width: "auto", padding: "3px 5px", fontSize: 12 }}
+                      disabled={monatGesperrt}
+                    >
+                      <option value="">— offen —</option>
+                      {lehrpersonen.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nachname}, {p.vorname}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
+                    <Knopf klein variante="voll" disabled={monatGesperrt} onClick={() => lektionAendern(l, { status: "gehalten" })}>
+                      Gehalten
+                    </Knopf>
+                  </td>
                 </tr>
               ))}
             </tbody>
