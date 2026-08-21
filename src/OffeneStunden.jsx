@@ -139,6 +139,34 @@ export default function OffeneStunden({ profil, session }) {
     }
   }
 
+  // Nur für Lohn/Admin: eine offene Lektion direkt hier ganz absagen (z.B.
+  // wenn eine Lehrperson sehr kurzfristig -- Minuten vor Beginn -- absagt
+  // und niemand mehr organisiert werden kann). Verhindert, dass jemand die
+  // Stunde trotzdem "übernimmt" und für eine nie gehaltene Lektion bezahlt wird.
+  async function absagen(o) {
+    const key = `${o.kurs_id}|${o.datum}`;
+    setUebernommen((prev) => ({ ...prev, [key]: true }));
+    setSpeichernFehler((prev) => ({ ...prev, [key]: null }));
+
+    const { error } = await speichereLektionStatus(supabase, {
+      kursId: o.kurs_id,
+      datum: o.datum,
+      istLehrer: null,
+      status: "ausgefallen",
+      bemerkung: "Ausfall",
+      geaendertVon: session.user.id,
+    });
+
+    if (error) {
+      setUebernommen((prev) => {
+        const rest = { ...prev };
+        delete rest[key];
+        return rest;
+      });
+      setSpeichernFehler((prev) => ({ ...prev, [key]: error.message }));
+    }
+  }
+
   const listeAnlaesse = offeneAnlaesse.filter((a) => !anlassUebernommen[a.id]);
 
   async function anlassUebernehmen(a) {
@@ -194,9 +222,16 @@ export default function OffeneStunden({ profil, session }) {
                     {soll ? `${soll.vorname} ${soll.nachname}` : "—"}
                   </span>
                 </div>
-                <Knopf klein variante="voll" onClick={() => uebernehmen(o)}>
-                  Übernehmen
-                </Knopf>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <Knopf klein variante="voll" onClick={() => uebernehmen(o)}>
+                    Übernehmen
+                  </Knopf>
+                  {(profil.r_lohn || profil.r_admin) && (
+                    <Knopf klein variante="warn" onClick={() => absagen(o)}>
+                      Ganz absagen
+                    </Knopf>
+                  )}
+                </div>
               </div>
               {speichernFehler[key] && (
                 <p style={{ color: C.rose, fontSize: 12, margin: "6px 0 0 16px" }}>

@@ -35,6 +35,7 @@ export default function Lektionsverwaltung({ session }) {
   const [absLehrerId, setAbsLehrerId] = useState("");
   const [absVon, setAbsVon] = useState("");
   const [absBis, setAbsBis] = useState("");
+  const [absErsatzLehrerId, setAbsErsatzLehrerId] = useState("");
   const [absMeldung, setAbsMeldung] = useState("");
   const [absLaeuft, setAbsLaeuft] = useState(false);
   const [abwesenheitenHistorie, setAbwesenheitenHistorie] = useState([]);
@@ -445,6 +446,10 @@ export default function Lektionsverwaltung({ session }) {
     setAktionFehler("");
     setAbsMeldung("");
     setAbsLaeuft(true);
+    // Ohne Ersatzlehrperson: wie bisher freigeben (offen für alle). Mit
+    // gewählter Ersatzlehrperson: direkt ihr zuweisen statt offen zu lassen
+    // -- praktisch für längere Abwesenheiten, wo die Vertretung schon feststeht.
+    const ersatzId = absErsatzLehrerId || null;
     try {
       const betroffene = await ladeAktuelleLektionen(supabase, absLehrerId, absVon, absBis);
       if (betroffene.length === 0) {
@@ -455,21 +460,22 @@ export default function Lektionsverwaltung({ session }) {
       setOverrides((prev) => {
         const next = { ...prev };
         betroffene.forEach((l) => {
-          if (l.datum >= von && l.datum <= bis) next[`${l.kursId}|${l.datum}`] = { ist_lehrer: null, status: "geplant", bemerkung: "" };
+          if (l.datum >= von && l.datum <= bis) next[`${l.kursId}|${l.datum}`] = { ist_lehrer: ersatzId, status: "geplant", bemerkung: "" };
         });
         return next;
       });
       const ergebnisse = await Promise.all(
         betroffene.map((l) =>
-          speichereLektionStatus(supabase, { kursId: l.kursId, datum: l.datum, istLehrer: null, status: "geplant", bemerkung: "", geaendertVon: session.user.id })
+          speichereLektionStatus(supabase, { kursId: l.kursId, datum: l.datum, istLehrer: ersatzId, status: "geplant", bemerkung: "", geaendertVon: session.user.id })
         )
       );
       const fehlgeschlagen = ergebnisse.filter((r) => r.error).length;
       const erfolgreich = betroffene.length - fehlgeschlagen;
+      const ersatzName = ersatzId ? P(ersatzId) : null;
       setAbsMeldung(
         fehlgeschlagen
-          ? `${erfolgreich} von ${betroffene.length} Stunde(n) freigegeben, ${fehlgeschlagen} fehlgeschlagen.`
-          : `${betroffene.length} Stunde(n) freigegeben.`
+          ? `${erfolgreich} von ${betroffene.length} Stunde(n) ${ersatzId ? "zugewiesen" : "freigegeben"}, ${fehlgeschlagen} fehlgeschlagen.`
+          : `${betroffene.length} Stunde(n) ${ersatzId ? `an ${ersatzName ? `${ersatzName.vorname} ${ersatzName.nachname}` : "Ersatzlehrperson"} zugewiesen` : "freigegeben"}.`
       );
       if (erfolgreich > 0) {
         const { data: protokoll, error: protokollErr } = await protokolliereAbwesenheit(supabase, {
@@ -483,6 +489,7 @@ export default function Lektionsverwaltung({ session }) {
       }
       setAbsVon("");
       setAbsBis("");
+      setAbsErsatzLehrerId("");
     } catch (e) {
       setAktionFehler(e.message || String(e));
     }
@@ -690,15 +697,26 @@ export default function Lektionsverwaltung({ session }) {
         <input type="date" value={absVon} onChange={(e) => setAbsVon(e.target.value)} style={{ ...eingabeStil, width: "auto" }} />
         <span style={{ fontSize: 12, color: C.inkSoft }}>bis</span>
         <input type="date" value={absBis} onChange={(e) => setAbsBis(e.target.value)} style={{ ...eingabeStil, width: "auto" }} />
+        <span style={{ fontSize: 12, color: C.inkSoft }}>Vertretung (optional)</span>
+        <select value={absErsatzLehrerId} onChange={(e) => setAbsErsatzLehrerId(e.target.value)} style={{ ...eingabeStil, width: "auto" }}>
+          <option value="">offen lassen</option>
+          {lehrpersonen.filter((p) => p.id !== absLehrerId).map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.vorname} {p.nachname}
+            </option>
+          ))}
+        </select>
         <Knopf variante="warn" onClick={absenzMelden} disabled={absLaeuft || !absLehrerId || !absVon || !absBis}>
-          Stunden freigeben
+          {absErsatzLehrerId ? "Stunden zuweisen" : "Stunden freigeben"}
         </Knopf>
         <Knopf onClick={absenzRueckgaengig} disabled={absLaeuft || !absLehrerId || !absVon || !absBis}>
           Rückgängig
         </Knopf>
-        <span style={{ fontSize: 12, color: C.inkSoft }}>
-          Künftige Stunden dieser Person im Zeitraum werden freigegeben. Nach "Bearbeiten" hier den Zeitraum
-          korrigieren und nochmals auf "Stunden freigeben" klicken, um die Korrektur zu speichern.
+        <span style={{ fontSize: 12, color: C.inkSoft, width: "100%" }}>
+          Künftige Stunden dieser Person im Zeitraum werden freigegeben — oder, falls eine Vertretung gewählt
+          ist, direkt dieser Person zugewiesen (erscheint dann nicht bei "Offene Stunden", sondern gleich bei
+          ihr als Vertretung). Nach "Bearbeiten" hier den Zeitraum korrigieren und nochmals auf "Stunden
+          freigeben/zuweisen" klicken, um die Korrektur zu speichern.
         </span>
         {absMeldung && <span style={{ fontSize: 12, color: C.teal, width: "100%" }}>{absMeldung}</span>}
 

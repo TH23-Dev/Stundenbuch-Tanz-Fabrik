@@ -26,6 +26,7 @@ export default function Backoffice({ session }) {
   const [satzHistorie, setSatzHistorie] = useState([]);
 
   const [neueZusatz, setNeueZusatz] = useState({ lehrerId: "", typ: "Spesen", betrag: "", text: "" });
+  const [zeigeUnbestaetigt, setZeigeUnbestaetigt] = useState(false);
 
   const { jahr, monatIndex, tageImMonat, von, bis } = useMemo(() => monatsGrenzenFuer(monat), [monat]);
   const monatGesperrt = !!abschluss;
@@ -180,6 +181,14 @@ export default function Backoffice({ session }) {
   const totalLohn = auswertung.reduce((s, a) => s + a.total, 0);
   const offeneCount = lektionen.filter((l) => !l.istLehrer && l.status !== "ausgefallen").length;
   const unbestGesamt = auswertung.reduce((s, a) => s + a.unbest, 0);
+  const unbestaetigteListe = useMemo(
+    () =>
+      lektionen
+        .filter(unbest)
+        .map((l) => ({ ...l, kurs: K(l.kursId) }))
+        .sort((a, b) => a.datum.localeCompare(b.datum) || a.kurs.zeit.localeCompare(b.kurs.zeit)),
+    [lektionen]
+  );
 
   async function zusatzHinzufuegen() {
     if (!neueZusatz.betrag || !neueZusatz.lehrerId) return;
@@ -358,12 +367,45 @@ export default function Backoffice({ session }) {
         <p style={{ color: C.rose, fontSize: 13, marginTop: -6, marginBottom: 14 }}>{aktionFehler}</p>
       )}
 
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
         <Kennzahl label="Total Ausgaben" wert={`CHF ${chf(totalLohn)}`} />
-        <Kennzahl label="Unbestätigt" wert={unbestGesamt} warn />
+        <button
+          onClick={() => setZeigeUnbestaetigt((v) => !v)}
+          disabled={unbestGesamt === 0}
+          style={{ background: "none", border: "none", padding: 0, cursor: unbestGesamt === 0 ? "default" : "pointer", textAlign: "left" }}
+        >
+          <Kennzahl label={`Unbestätigt${unbestGesamt > 0 ? " · Details ▾" : ""}`} wert={unbestGesamt} warn />
+        </button>
         <Kennzahl label="Offene Stunden" wert={offeneCount} warn />
         <Kennzahl label="Lektionen" wert={lektionen.length} />
       </div>
+
+      {zeigeUnbestaetigt && unbestaetigteListe.length > 0 && (
+        <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, overflow: "auto", marginBottom: 16, maxHeight: 300 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Datum</th>
+                <th>Kurs</th>
+                <th>Standort</th>
+                <th>Lehrperson</th>
+              </tr>
+            </thead>
+            <tbody>
+              {unbestaetigteListe.map((l) => (
+                <tr key={l.id}>
+                  <td className="mono" style={{ color: C.inkSoft, whiteSpace: "nowrap" }}>
+                    {datumLabel(l.datum)} {l.kurs.zeit}
+                  </td>
+                  <td>{l.kurs.bezeichnung}</td>
+                  <td style={{ color: C.inkSoft }}>{orte[l.kurs.standort_code] || l.kurs.standort_code}</td>
+                  <td>{name(l.istLehrer)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div style={{ ...karteStil, marginBottom: 24, gap: 8, flexWrap: "wrap" }}>
         {monatGesperrt ? (

@@ -479,7 +479,7 @@ export default function MeineStunden({ profil, session }) {
                   {l.status === "gehalten" && <Tag text="Gehalten" farbe={C.teal} />}
                   {l.status === "ausgefallen" && <Tag text={l.bemerkung || "Fällt aus"} farbe={C.muted} />}
                   {unbest(l) && <Tag text="Noch offen" farbe={C.rose} />}
-                  {!l.istLehrer && <Tag text="Ausgetragen · Vertretung gesucht" farbe={C.rose} />}
+                  {!l.istLehrer && l.status !== "ausgefallen" && <Tag text="Ausgetragen · Vertretung gesucht" farbe={C.rose} />}
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   {l.status === "geplant" && vergangen(l) && l.istLehrer === profil.id && (
