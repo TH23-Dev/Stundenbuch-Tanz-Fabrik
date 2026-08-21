@@ -149,7 +149,7 @@ export default function Anlaesse() {
           <option value="">offen lassen</option>
           {lehrpersonen.filter((p) => p.aktiv).map((p) => (
             <option key={p.id} value={p.id}>
-              {p.vorname} {p.nachname}
+              {p.nachname}, {p.vorname}
             </option>
           ))}
         </select>
@@ -209,7 +209,7 @@ export default function Anlaesse() {
                     <option value="">— offen —</option>
                     {lehrpersonen.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.vorname} {p.nachname}
+                        {p.nachname}, {p.vorname}
                       </option>
                     ))}
                   </select>

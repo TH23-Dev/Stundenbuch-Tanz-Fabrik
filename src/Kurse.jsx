@@ -253,7 +253,7 @@ export default function Kurse() {
         <select value={neuerKurs.lehrerId} onChange={(e) => setNeuerKurs({ ...neuerKurs, lehrerId: e.target.value })} style={{ ...eingabeStil, width: "auto" }}>
           {lehrpersonen.filter((p) => p.aktiv).map((p) => (
             <option key={p.id} value={p.id}>
-              {p.vorname} {p.nachname}
+              {p.nachname}, {p.vorname}
             </option>
           ))}
         </select>

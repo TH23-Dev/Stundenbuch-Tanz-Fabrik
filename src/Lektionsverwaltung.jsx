@@ -689,7 +689,7 @@ export default function Lektionsverwaltung({ session }) {
         <select value={absLehrerId} onChange={(e) => setAbsLehrerId(e.target.value)} style={{ ...eingabeStil, width: "auto" }}>
           {lehrpersonen.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.vorname} {p.nachname}
+              {p.nachname}, {p.vorname}
             </option>
           ))}
         </select>
@@ -702,7 +702,7 @@ export default function Lektionsverwaltung({ session }) {
           <option value="">offen lassen</option>
           {lehrpersonen.filter((p) => p.id !== absLehrerId).map((p) => (
             <option key={p.id} value={p.id}>
-              {p.vorname} {p.nachname}
+              {p.nachname}, {p.vorname}
             </option>
           ))}
         </select>
@@ -779,7 +779,7 @@ export default function Lektionsverwaltung({ session }) {
           <option value="">Alle Lehrer</option>
           {lehrpersonen.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.vorname} {p.nachname}
+              {p.nachname}, {p.vorname}
             </option>
           ))}
         </select>
@@ -828,7 +828,7 @@ export default function Lektionsverwaltung({ session }) {
                       <option value="">— offen —</option>
                       {lehrpersonen.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.vorname} {p.nachname}
+                          {p.nachname}, {p.vorname}
                         </option>
                       ))}
                     </select>

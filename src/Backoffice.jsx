@@ -529,7 +529,7 @@ export default function Backoffice({ session }) {
         <select value={neueZusatz.lehrerId} onChange={(e) => setNeueZusatz({ ...neueZusatz, lehrerId: e.target.value })} style={{ ...eingabeStil, width: "auto" }}>
           {lehrpersonen.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.vorname} {p.nachname}
+              {p.nachname}, {p.vorname}
             </option>
           ))}
         </select>
