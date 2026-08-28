@@ -28,6 +28,7 @@ export default function Backoffice({ session }) {
 
   const [neueZusatz, setNeueZusatz] = useState({ lehrerId: "", typ: "Spesen", betrag: "", text: "" });
   const [zeigeUnbestaetigt, setZeigeUnbestaetigt] = useState(false);
+  const [vorschauModus, setVorschauModus] = useState(false);
 
   const { jahr, monatIndex, tageImMonat, von, bis } = useMemo(() => monatsGrenzenFuer(monat), [monat]);
   const monatGesperrt = !!abschluss;
@@ -132,9 +133,16 @@ export default function Backoffice({ session }) {
 
   const vergangen = (l) => istVergangen(l.datum, K(l.kursId).zeit, K(l.kursId).dauer_min);
   const istVertretung = (l) => l.istLehrer && l.istLehrer !== l.sollLehrer;
+  // "Unbestätigt" bleibt immer streng: bereits vergangen, aber niemand hat
+  // bestätigt -- das soll der Vorschau-Modus unten NIE verschleiern.
   const unbest = (l) => l.status === "geplant" && vergangen(l) && !!l.istLehrer;
   // Regel 6 (korrigiert): nur bestätigte ("gehalten") Lektionen zählen für den Lohn.
-  const relevant = (l) => l.status === "gehalten" && !!l.istLehrer;
+  // Ausnahme im Vorschau-Modus: noch nicht stattgefundene, aber geplante
+  // Lektionen (status "geplant" und noch NICHT vergangen) werden dann so
+  // gerechnet, als fänden sie statt -- für einen Export vor Monatsende.
+  // Bereits vergangene, vergessene Bestätigungen ("unbest") zählen dabei
+  // bewusst weiterhin NICHT mit, die müssen aktiv nachverfolgt werden.
+  const relevant = (l) => (l.status === "gehalten" || (vorschauModus && l.status === "geplant" && !vergangen(l))) && !!l.istLehrer;
   const stdFn = (l) => std(K(l.kursId).dauer_min);
   const satz = (l) => {
     if (!l.istLehrer) return 0;
@@ -378,7 +386,7 @@ export default function Backoffice({ session }) {
     waehrungsformatSetzen(wsZusatz, zusatzHeader, ["Betrag (CHF)"], zusatzDaten.length);
     XLSX.utils.book_append_sheet(wb, wsZusatz, "Zusatzpositionen");
 
-    XLSX.writeFile(wb, `Lehrerabrechnung_${monat}.xlsx`);
+    XLSX.writeFile(wb, `Lehrerabrechnung_${monat}${vorschauModus ? "_VORSCHAU" : ""}.xlsx`);
   }
 
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Abrechnung …</p>;
@@ -393,10 +401,28 @@ export default function Backoffice({ session }) {
         <input type="month" value={monat} onChange={(e) => setMonat(e.target.value)} style={{ ...eingabeStil, width: "auto" }} />
         <div style={{ marginLeft: "auto" }}>
           <Knopf variante="voll" onClick={exportieren}>
-            Excel exportieren
+            Excel exportieren{vorschauModus ? " (Vorschau)" : ""}
           </Knopf>
         </div>
       </div>
+
+      <label
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontSize: 13,
+          color: vorschauModus ? C.rose : C.inkSoft,
+          marginBottom: 14,
+          cursor: "pointer",
+        }}
+      >
+        <input type="checkbox" checked={vorschauModus} onChange={(e) => setVorschauModus(e.target.checked)} />
+        Vorschau-Modus: noch nicht stattgefundene, geplante Lektionen dieses Monats so rechnen, als wären sie
+        gehalten worden (für einen Export vor Monatsende an die Lohnbuchhaltung — verändert nichts in der
+        Datenbank, nur diese Ansicht/den Export). Bereits vergangene, unbestätigte Lektionen bleiben davon
+        unberührt.
+      </label>
 
       {aktionFehler && (
         <p style={{ color: C.rose, fontSize: 13, marginTop: -6, marginBottom: 14 }}>{aktionFehler}</p>
@@ -474,9 +500,15 @@ export default function Backoffice({ session }) {
           <>
             <strong style={{ fontSize: 13 }}>Monat</strong>
             <span style={{ fontSize: 12, color: C.inkSoft }}>Nach Abschluss sind keine Änderungen an Lektionen mehr möglich.</span>
-            <Knopf variante="warn" onClick={monatAbschliessen} klein>
+            <Knopf variante="warn" onClick={monatAbschliessen} klein disabled={vorschauModus}>
               Monat abschliessen
             </Knopf>
+            {vorschauModus && (
+              <span style={{ fontSize: 12, color: C.rose, width: "100%" }}>
+                Abschliessen ist gesperrt, solange der Vorschau-Modus aktiv ist — sonst würden ungehaltene
+                Lektionen dauerhaft als bezahlt gelten. Häkchen oben entfernen, sobald der Export verschickt ist.
+              </span>
+            )}
           </>
         )}
       </div>
