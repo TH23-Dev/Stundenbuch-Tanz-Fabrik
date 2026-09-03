@@ -502,7 +502,7 @@ export default function MeineStunden({ profil, session }) {
                       Doch nicht gegeben
                     </Knopf>
                   )}
-                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && (
+                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && !vergangen(l) && (
                     <Knopf klein variante="warn" onClick={() => aendern(l, { status: "ausgefallen", bemerkung: "Ausfall" })}>
                       Fällt aus
                     </Knopf>
