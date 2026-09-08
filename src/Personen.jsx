@@ -72,7 +72,12 @@ export default function Personen() {
   }
 
   async function emailSpeichern(p) {
-    const { error } = await supabase.from("lehrer").update({ email: p.email || null }).eq("id", p.id);
+    // Getrimmt speichern -- ein kopiertes Leerzeichen am Anfang/Ende würde
+    // sonst die Login-Verknüpfung (verknuepfe_lehrer-Trigger) lautlos
+    // scheitern lassen, ohne dass das hier auffällt.
+    const email = p.email ? p.email.trim() : "";
+    if (email !== p.email) setLehrerListe((prev) => prev.map((x) => (x.id === p.id ? { ...x, email } : x)));
+    const { error } = await supabase.from("lehrer").update({ email: email || null }).eq("id", p.id);
     if (error) setAktionFehler(error.message);
   }
 
@@ -118,7 +123,7 @@ export default function Personen() {
         id,
         vorname: neuePerson.vorname,
         nachname: neuePerson.nachname,
-        email: neuePerson.email || null,
+        email: neuePerson.email ? neuePerson.email.trim() || null : null,
         satz,
         vertretungssatz,
         r_lehrer: true,
