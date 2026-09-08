@@ -37,15 +37,41 @@ export default function App() {
     }
     let aktiv = true;
     setProfil(undefined);
+    const FELDER = "id, vorname, nachname, satz, vertretungssatz, r_lehrer, r_anlaesse, r_lohn, r_admin, aktiv";
     supabase
       .from("lehrer")
-      .select("id, vorname, nachname, satz, vertretungssatz, r_lehrer, r_anlaesse, r_lohn, r_admin, aktiv")
+      .select(FELDER)
       .eq("user_id", session.user.id)
       .maybeSingle()
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (!aktiv) return;
-        if (error) setProfilFehler(error.message);
-        setProfil(data ?? null);
+        if (error) {
+          setProfilFehler(error.message);
+          return;
+        }
+        if (data) {
+          setProfil(data);
+          return;
+        }
+        // Noch keine Zeile mit dieser user_id gefunden -- kann daran liegen,
+        // dass die E-Mail-Adresse erst NACH dem ersten Login-Versuch in den
+        // Stammdaten eingetragen/korrigiert wurde (der Verknüpfungs-Trigger
+        // läuft nur beim allerersten Signup). Einmal versuchen, sich selbst
+        // per E-Mail-Abgleich zu verknüpfen, dann nochmal nachschauen.
+        const { error: verknuepfFehler } = await supabase.rpc("verknuepfe_mich");
+        if (!aktiv) return;
+        if (verknuepfFehler) {
+          setProfil(null);
+          return;
+        }
+        const { data: erneut, error: erneutFehler } = await supabase
+          .from("lehrer")
+          .select(FELDER)
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        if (!aktiv) return;
+        if (erneutFehler) setProfilFehler(erneutFehler.message);
+        setProfil(erneut ?? null);
       });
     return () => {
       aktiv = false;
