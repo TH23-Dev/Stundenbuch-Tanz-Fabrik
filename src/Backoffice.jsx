@@ -345,6 +345,7 @@ export default function Backoffice({ session }) {
       "Workshop (CHF)",
       "Camp (CHF)",
       "Auftritt (CHF)",
+      "Betreuung (CHF)",
       "Spesen/Abzug (CHF)",
       "Total (CHF)",
       "Unbestätigt",
@@ -359,6 +360,7 @@ export default function Backoffice({ session }) {
       "Workshop (CHF)": Number(summeTyp(a.p.id, "Workshop").toFixed(2)),
       "Camp (CHF)": Number(summeTyp(a.p.id, "Camp").toFixed(2)),
       "Auftritt (CHF)": Number(summeTyp(a.p.id, "Auftritt").toFixed(2)),
+      "Betreuung (CHF)": Number(summeTyp(a.p.id, "Betreuung").toFixed(2)),
       "Spesen/Abzug (CHF)": Number(summeManuell(a.p.id).toFixed(2)),
       "Total (CHF)": Number(a.total.toFixed(2)),
       Unbestätigt: a.unbest,
@@ -367,7 +369,7 @@ export default function Backoffice({ session }) {
     waehrungsformatSetzen(
       wsZusammenfassung,
       zusammenfassungHeader,
-      ["Lohn (CHF)", "Satz Vertretung (CHF)", "Workshop (CHF)", "Camp (CHF)", "Auftritt (CHF)", "Spesen/Abzug (CHF)", "Total (CHF)"],
+      ["Lohn (CHF)", "Satz Vertretung (CHF)", "Workshop (CHF)", "Camp (CHF)", "Auftritt (CHF)", "Betreuung (CHF)", "Spesen/Abzug (CHF)", "Total (CHF)"],
       zusammenfassungDaten.length
     );
     XLSX.utils.book_append_sheet(wb, wsZusammenfassung, "Zusammenfassung");

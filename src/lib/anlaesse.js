@@ -1,4 +1,4 @@
-export const ANLASS_TYPEN = ["Workshop", "Camp", "Auftritt"];
+export const ANLASS_TYPEN = ["Workshop", "Camp", "Auftritt", "Betreuung"];
 
 export const anlassVergangen = (a) => new Date(a.datum + "T23:59") < new Date();
 export const anlassUnbest = (a) => a.status === "geplant" && anlassVergangen(a) && !!a.lehrer_id;
