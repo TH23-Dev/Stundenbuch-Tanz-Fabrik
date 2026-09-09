@@ -227,8 +227,10 @@ export default function Anlaesse() {
               <th>Standort</th>
               <th>Pauschale</th>
               <th>Lehrer</th>
-              <th>Team</th>
-              <th>Offen sichtbar</th>
+              <th style={{ width: 56 }}>Team</th>
+              <th style={{ width: 70 }} title="Bei 'Offene Stunden' sichtbar, solange keine Hauptperson zugeteilt ist">
+                Sichtbar
+              </th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -268,7 +270,7 @@ export default function Anlaesse() {
                       const neu = e.target.value || null;
                       anlassAendern(a, { lehrer_id: neu, status: neu ? (a.status === "offen" ? "geplant" : a.status) : "offen" });
                     }}
-                    style={{ ...eingabeStil, width: "auto", padding: "3px 5px", fontSize: 12 }}
+                    style={{ ...eingabeStil, width: 140, padding: "3px 5px", fontSize: 12 }}
                   >
                     <option value="">— offen —</option>
                     {lehrpersonen.map((p) => (
@@ -278,7 +280,7 @@ export default function Anlaesse() {
                     ))}
                   </select>
                 </td>
-                <td>
+                <td style={{ textAlign: "center" }}>
                   <Knopf klein onClick={() => setOffenerTeam(offenerTeam === a.id ? null : a.id)}>
                     {team.length > 0 ? `+${team.length}` : "+"}
                   </Knopf>
