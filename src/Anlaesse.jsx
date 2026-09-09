@@ -14,6 +14,9 @@ export default function Anlaesse() {
   const [orte, setOrte] = useState({});
   const [lehrpersonen, setLehrpersonen] = useState([]);
   const [anlaesseListe, setAnlaesseListe] = useState([]);
+  const [teilnehmerListe, setTeilnehmerListe] = useState([]);
+  const [offenerTeam, setOffenerTeam] = useState(null); // anlass.id, dessen Team-Bereich aufgeklappt ist
+  const [neuerTeilnehmer, setNeuerTeilnehmer] = useState({ lehrerId: "", betrag: "" });
 
   const [neuerAnlass, setNeuerAnlass] = useState({ datum: iso(new Date()), zeit: "14:00", titel: "", typ: "Workshop", ort: "", pauschale: "", lehrerId: "" });
 
@@ -27,7 +30,7 @@ export default function Anlaesse() {
       const [{ data: orteData, error: e1 }, { data: lehrerData, error: e2 }, { data: anlaesseData, error: e3 }] = await Promise.all([
         supabase.from("standorte").select("code,name"),
         supabase.from("v_personen_oeffentlich").select("id,vorname,nachname,aktiv,r_lehrer").eq("r_lehrer", true).order("nachname"),
-        supabase.from("anlaesse").select("id,datum,zeit,titel,standort_code,typ,pauschale,lehrer_id,status").gte("datum", von).lte("datum", bis),
+        supabase.from("anlaesse").select("id,datum,zeit,titel,standort_code,typ,pauschale,lehrer_id,status,offen_sichtbar").gte("datum", von).lte("datum", bis),
       ]);
       if (!aktiv) return;
       const fehler = e1 || e2 || e3;
@@ -40,8 +43,26 @@ export default function Anlaesse() {
       (orteData || []).forEach((o) => (orteMap[o.code] = o.name));
       setOrte(orteMap);
       setLehrpersonen(lehrerData || []);
-      setAnlaesseListe((anlaesseData || []).sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit)));
+      const liste = (anlaesseData || []).sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit));
+      setAnlaesseListe(liste);
       setNeuerAnlass((a) => ({ ...a, ort: a.ort || (orteData || [])[0]?.code || "" }));
+
+      const anlassIds = liste.map((a) => a.id);
+      if (anlassIds.length > 0) {
+        const { data: teilnehmerData, error: e4 } = await supabase
+          .from("anlass_teilnehmer")
+          .select("id,anlass_id,lehrer_id,betrag")
+          .in("anlass_id", anlassIds);
+        if (!aktiv) return;
+        if (e4) {
+          setLadeFehler(e4.message);
+          setLaden(false);
+          return;
+        }
+        setTeilnehmerListe(teilnehmerData || []);
+      } else {
+        setTeilnehmerListe([]);
+      }
       setLaden(false);
     }
     laden();
@@ -101,6 +122,44 @@ export default function Anlaesse() {
     }
     setAnlaesseListe((prev) => [...prev, data].sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit)));
     setNeuerAnlass((a) => ({ ...a, titel: "", pauschale: "" }));
+  }
+
+  // Zusätzliche Lehrpersonen pro Anlass, jede mit eigenem Betrag -- reine
+  // Admin-/Anlass-Verwalter-Zuteilung, kein Self-Service. Die Haupt-Person
+  // (anlaesse.lehrer_id/pauschale) bleibt davon unberührt und steuert wie
+  // bisher, ob der Anlass "offen" ist.
+  async function teilnehmerHinzufuegen(anlassId) {
+    if (!neuerTeilnehmer.lehrerId) return;
+    setAktionFehler("");
+    const eintrag = {
+      id: "at" + Date.now(),
+      anlass_id: anlassId,
+      lehrer_id: neuerTeilnehmer.lehrerId,
+      betrag: Number(neuerTeilnehmer.betrag) || 0,
+    };
+    const { data, error } = await supabase.from("anlass_teilnehmer").insert(eintrag).select().single();
+    if (error) {
+      setAktionFehler(error.message);
+      return;
+    }
+    setTeilnehmerListe((prev) => [...prev, data]);
+    setNeuerTeilnehmer({ lehrerId: "", betrag: "" });
+  }
+
+  async function teilnehmerBetragAendern(t, betrag) {
+    setTeilnehmerListe((prev) => prev.map((x) => (x.id === t.id ? { ...x, betrag } : x)));
+    const { error } = await supabase.from("anlass_teilnehmer").update({ betrag }).eq("id", t.id);
+    if (error) setAktionFehler(error.message);
+  }
+
+  async function teilnehmerEntfernen(t) {
+    const vorher = teilnehmerListe;
+    setTeilnehmerListe((prev) => prev.filter((x) => x.id !== t.id));
+    const { error } = await supabase.from("anlass_teilnehmer").delete().eq("id", t.id);
+    if (error) {
+      setTeilnehmerListe(vorher);
+      setAktionFehler(error.message);
+    }
   }
 
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Anlässe …</p>;
@@ -168,6 +227,8 @@ export default function Anlaesse() {
               <th>Standort</th>
               <th>Pauschale</th>
               <th>Lehrer</th>
+              <th>Team</th>
+              <th>Offen sichtbar</th>
               <th>Status</th>
               <th></th>
             </tr>
@@ -175,13 +236,16 @@ export default function Anlaesse() {
           <tbody>
             {anlaesseListe.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ color: C.muted }}>
+                <td colSpan={10} style={{ color: C.muted }}>
                   Keine Anlässe in diesem Monat.
                 </td>
               </tr>
             )}
-            {anlaesseListe.map((a) => (
-              <tr key={a.id}>
+            {anlaesseListe.map((a) => {
+              const team = teilnehmerListe.filter((t) => t.anlass_id === a.id);
+              return (
+              <React.Fragment key={a.id}>
+              <tr>
                 <td className="mono" style={{ color: C.inkSoft, whiteSpace: "nowrap" }}>
                   {datumLabel(a.datum)} {a.zeit}
                 </td>
@@ -215,6 +279,19 @@ export default function Anlaesse() {
                   </select>
                 </td>
                 <td>
+                  <Knopf klein onClick={() => setOffenerTeam(offenerTeam === a.id ? null : a.id)}>
+                    {team.length > 0 ? `+${team.length}` : "+"}
+                  </Knopf>
+                </td>
+                <td style={{ textAlign: "center" }}>
+                  <input
+                    type="checkbox"
+                    checked={a.offen_sichtbar}
+                    onChange={(e) => anlassAendern(a, { offen_sichtbar: e.target.checked })}
+                    title="Bei 'Offene Stunden' anzeigen, solange keine Hauptperson zugeteilt ist"
+                  />
+                </td>
+                <td>
                   {a.status === "ausgefallen" ? (
                     <Tag text="Fällt aus" farbe={C.muted} />
                   ) : anlassUnbest(a) ? (
@@ -242,7 +319,62 @@ export default function Anlaesse() {
                   </Knopf>
                 </td>
               </tr>
-            ))}
+              {offenerTeam === a.id && (
+                <tr>
+                  <td colSpan={10} style={{ background: C.bg, padding: 12 }}>
+                    <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 8 }}>
+                      Weitere Lehrpersonen für "{a.titel}" — zusätzlich zur Hauptperson oben, jede mit eigenem
+                      Betrag. Reine Zuteilung durch dich, kein Selbst-Eintragen.
+                    </div>
+                    {team.length === 0 && <div style={{ fontSize: 12, color: C.muted, marginBottom: 8 }}>Noch niemand zusätzlich zugeteilt.</div>}
+                    {team.map((t) => (
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 13, minWidth: 160 }}>{name(t.lehrer_id)}</span>
+                        <input
+                          type="number"
+                          value={t.betrag}
+                          onChange={(e) => teilnehmerBetragAendern(t, Number(e.target.value))}
+                          className="mono"
+                          style={{ ...eingabeStil, width: 90, padding: "3px 5px", fontSize: 12 }}
+                        />
+                        <Knopf klein variante="warn" onClick={() => teilnehmerEntfernen(t)}>
+                          Entfernen
+                        </Knopf>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                      <select
+                        value={neuerTeilnehmer.lehrerId}
+                        onChange={(e) => setNeuerTeilnehmer({ ...neuerTeilnehmer, lehrerId: e.target.value })}
+                        style={{ ...eingabeStil, width: "auto" }}
+                      >
+                        <option value="">Person wählen…</option>
+                        {lehrpersonen
+                          .filter((p) => p.aktiv && p.id !== a.lehrer_id && !team.some((t) => t.lehrer_id === p.id))
+                          .map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.nachname}, {p.vorname}
+                            </option>
+                          ))}
+                      </select>
+                      <input
+                        type="number"
+                        placeholder="Betrag"
+                        value={neuerTeilnehmer.betrag}
+                        onChange={(e) => setNeuerTeilnehmer({ ...neuerTeilnehmer, betrag: e.target.value })}
+                        className="mono"
+                        style={{ ...eingabeStil, width: 90 }}
+                      />
+                      <Knopf klein variante="voll" onClick={() => teilnehmerHinzufuegen(a.id)}>
+                        Hinzufügen
+                      </Knopf>
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

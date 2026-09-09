@@ -23,6 +23,7 @@ export default function Backoffice({ session }) {
   const [overrides, setOverrides] = useState({});
   const [zusatzListe, setZusatzListe] = useState([]);
   const [anlaesseListe, setAnlaesseListe] = useState([]);
+  const [anlassTeilnehmerListe, setAnlassTeilnehmerListe] = useState([]);
   const [abschluss, setAbschluss] = useState(null);
   const [satzHistorie, setSatzHistorie] = useState([]);
 
@@ -70,6 +71,23 @@ export default function Backoffice({ session }) {
       }
       setSatzHistorie(historieData || []);
       setAnlaesseListe(anlaesseData || []);
+
+      const anlassIds = (anlaesseData || []).map((a) => a.id);
+      if (anlassIds.length > 0) {
+        const { data: teilnehmerData, error: e9 } = await supabase
+          .from("anlass_teilnehmer")
+          .select("id,anlass_id,lehrer_id,betrag")
+          .in("anlass_id", anlassIds);
+        if (!aktiv) return;
+        if (e9) {
+          setLadeFehler(e9.message);
+          setLaden(false);
+          return;
+        }
+        setAnlassTeilnehmerListe(teilnehmerData || []);
+      } else {
+        setAnlassTeilnehmerListe([]);
+      }
 
       const orteMap = {};
       (orteData || []).forEach((o) => (orteMap[o.code] = o.name));
@@ -155,18 +173,35 @@ export default function Backoffice({ session }) {
 
   // Bestätigte Anlässe fliessen automatisch als Zusatzposition ein (Etappe 6) —
   // nicht löschbar hier, das läuft über den Anlass selbst ("Fällt aus").
-  const anlassAlsZusatz = useMemo(
-    () =>
-      anlaesseListe.filter(anlassRelevant).map((a) => ({
-        id: "anl-" + a.id,
-        lehrer_id: a.lehrer_id,
-        typ: a.typ,
-        betrag: a.pauschale,
-        bemerkung: `${a.titel} · ${datumLabel(a.datum)}`,
-        auto: true,
-      })),
-    [anlaesseListe]
-  );
+  // Zusätzlich zugeteilte Lehrpersonen (anlass_teilnehmer) fliessen mit
+  // ihrem eigenen Betrag genauso ein, sobald der Anlass bestätigt ist.
+  const anlassAlsZusatz = useMemo(() => {
+    const relevanteAnlaesse = anlaesseListe.filter(anlassRelevant);
+    const haupt = relevanteAnlaesse.map((a) => ({
+      id: "anl-" + a.id,
+      lehrer_id: a.lehrer_id,
+      typ: a.typ,
+      betrag: a.pauschale,
+      bemerkung: `${a.titel} · ${datumLabel(a.datum)}`,
+      auto: true,
+    }));
+    const anlaesseById = {};
+    relevanteAnlaesse.forEach((a) => (anlaesseById[a.id] = a));
+    const weitere = anlassTeilnehmerListe
+      .filter((t) => anlaesseById[t.anlass_id])
+      .map((t) => {
+        const a = anlaesseById[t.anlass_id];
+        return {
+          id: "anlt-" + t.id,
+          lehrer_id: t.lehrer_id,
+          typ: a.typ,
+          betrag: t.betrag,
+          bemerkung: `${a.titel} · ${datumLabel(a.datum)}`,
+          auto: true,
+        };
+      });
+    return [...haupt, ...weitere];
+  }, [anlaesseListe, anlassTeilnehmerListe]);
   const alleZusatz = useMemo(() => [...zusatzListe, ...anlassAlsZusatz], [zusatzListe, anlassAlsZusatz]);
 
   const auswertung = useMemo(

@@ -49,7 +49,8 @@ export default function OffeneStunden({ profil, session }) {
           .from("v_anlaesse_ohne_betrag")
           .select("id,datum,zeit,titel,standort_code,typ,lehrer_id,status")
           .is("lehrer_id", null)
-          .neq("status", "ausgefallen"),
+          .neq("status", "ausgefallen")
+          .eq("offen_sichtbar", true),
       ]);
       if (!aktiv) return;
       if (statusErr || orteErr || anlassErr) {
