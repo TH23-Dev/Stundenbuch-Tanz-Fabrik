@@ -161,6 +161,13 @@ export default function MeineStunden({ profil, session }) {
       .sort((a, b) => a.datum.localeCompare(b.datum) || K(a.kursId).zeit.localeCompare(K(b.kursId).zeit));
   }, [kurseById, overrides, profil.id, jahr, monatIndex, tageImMonat]);
 
+  // Für die Lehrperson klar getrennt statt alles in einer Liste vermischt
+  // (Feedback): eigene Kurse zuerst, dann Vertretungen für andere. Eine
+  // Lektion ist in genau einer der beiden Gruppen, "lektionen" oben enthält
+  // ohnehin nur, wo istLehrer oder sollLehrer die eigene Person ist.
+  const eigeneListe = useMemo(() => lektionen.filter((l) => l.sollLehrer === profil.id), [lektionen, profil.id]);
+  const vertretungenListe = useMemo(() => lektionen.filter((l) => l.sollLehrer !== profil.id), [lektionen, profil.id]);
+
   const vergangen = (l) => istVergangen(l.datum, K(l.kursId).zeit, K(l.kursId).dauer_min);
   const istVertretung = (l) => l.istLehrer && l.istLehrer !== l.sollLehrer;
   const unbest = (l) => l.status === "geplant" && vergangen(l) && l.istLehrer;
@@ -365,6 +372,88 @@ export default function MeineStunden({ profil, session }) {
     }
   }
 
+  function renderLektion(l) {
+    const k = K(l.kursId);
+    return (
+      <div key={l.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <div
+            style={{
+              width: 4,
+              borderRadius: 2,
+              alignSelf: "stretch",
+              minHeight: 32,
+              flexShrink: 0,
+              background:
+                l.status === "ausgefallen"
+                  ? C.line
+                  : !l.istLehrer || unbest(l)
+                  ? C.rose
+                  : l.status === "gehalten"
+                  ? istVertretung(l)
+                    ? C.brass
+                    : C.teal
+                  : C.muted,
+            }}
+          />
+          <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span className="mono" style={{ fontSize: 13, color: C.inkSoft }}>
+              {datumLabel(l.datum)} · {k.zeit}
+            </span>
+            <strong style={{ fontSize: 14 }}>{k.bezeichnung}</strong>
+            <span style={{ fontSize: 12, color: C.inkSoft }}>
+              {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′
+              {!uebernommenVonAnderer(l) && <> · CHF {satz(l)}.–</>}
+            </span>
+            {istVertretung(l) && l.istLehrer === profil.id && <Tag text={`Vertretung für ${namePerson(l.sollLehrer)}`} farbe={C.brass} />}
+            {uebernommenVonAnderer(l) && <Tag text={`Übernommen von ${namePerson(l.istLehrer)}`} farbe={C.brass} />}
+            {l.status === "gehalten" && <Tag text="Gehalten" farbe={C.teal} />}
+            {l.status === "ausgefallen" && <Tag text={l.bemerkung || "Fällt aus"} farbe={C.muted} />}
+            {unbest(l) && <Tag text="Noch offen" farbe={C.rose} />}
+            {!l.istLehrer && l.status !== "ausgefallen" && <Tag text="Ausgetragen · Vertretung gesucht" farbe={C.rose} />}
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {l.status === "geplant" && vergangen(l) && l.istLehrer === profil.id && (
+              <Knopf klein variante="voll" onClick={() => aendern(l, { status: "gehalten" })}>
+                Gehalten
+              </Knopf>
+            )}
+            {!l.istLehrer && (
+              <Knopf klein onClick={() => aendern(l, { ist_lehrer: profil.id })}>
+                Doch übernehmen
+              </Knopf>
+            )}
+            {l.istLehrer === profil.id && l.status !== "ausgefallen" && !vergangen(l) && (
+              <Knopf klein variante="warn" onClick={() => aendern(l, { ist_lehrer: null })}>
+                Kann nicht
+              </Knopf>
+            )}
+            {l.istLehrer === profil.id && l.status !== "ausgefallen" && vergangen(l) && (
+              <Knopf klein variante="warn" onClick={() => aendern(l, { ist_lehrer: null, status: "geplant" })}>
+                Doch nicht gegeben
+              </Knopf>
+            )}
+            {l.istLehrer === profil.id && l.status !== "ausgefallen" && !vergangen(l) && (
+              <Knopf klein variante="warn" onClick={() => aendern(l, { status: "ausgefallen", bemerkung: "Ausfall" })}>
+                Fällt aus
+              </Knopf>
+            )}
+            {l.istLehrer === profil.id && l.status === "ausgefallen" && (
+              <Knopf klein onClick={() => aendern(l, { status: "geplant", bemerkung: "" })}>
+                Reaktivieren
+              </Knopf>
+            )}
+          </div>
+        </div>
+        {speichernFehler[l.id] && (
+          <p style={{ color: C.rose, fontSize: 12, margin: "6px 0 0 16px" }}>
+            Konnte nicht gespeichert werden: {speichernFehler[l.id]}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   if (laden) return <p style={{ color: C.inkSoft }}>Lade Stunden …</p>;
   if (ladeFehler) return <p style={{ color: C.rose, fontSize: 14 }}>Stunden konnten nicht geladen werden: {ladeFehler}</p>;
 
@@ -440,89 +529,23 @@ export default function MeineStunden({ profil, session }) {
         </div>
       )}
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-        {lektionen.map((l) => {
-          const k = K(l.kursId);
-          return (
-            <div key={l.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <div
-                  style={{
-                    width: 4,
-                    borderRadius: 2,
-                    alignSelf: "stretch",
-                    minHeight: 32,
-                    flexShrink: 0,
-                    background:
-                      l.status === "ausgefallen"
-                        ? C.line
-                        : !l.istLehrer || unbest(l)
-                        ? C.rose
-                        : l.status === "gehalten"
-                        ? istVertretung(l)
-                          ? C.brass
-                          : C.teal
-                        : C.muted,
-                  }}
-                />
-                <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span className="mono" style={{ fontSize: 13, color: C.inkSoft }}>
-                    {datumLabel(l.datum)} · {k.zeit}
-                  </span>
-                  <strong style={{ fontSize: 14 }}>{k.bezeichnung}</strong>
-                  <span style={{ fontSize: 12, color: C.inkSoft }}>
-                    {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′
-                    {!uebernommenVonAnderer(l) && <> · CHF {satz(l)}.–</>}
-                  </span>
-                  {istVertretung(l) && l.istLehrer === profil.id && <Tag text={`Vertretung für ${namePerson(l.sollLehrer)}`} farbe={C.brass} />}
-                  {uebernommenVonAnderer(l) && <Tag text={`Übernommen von ${namePerson(l.istLehrer)}`} farbe={C.brass} />}
-                  {l.status === "gehalten" && <Tag text="Gehalten" farbe={C.teal} />}
-                  {l.status === "ausgefallen" && <Tag text={l.bemerkung || "Fällt aus"} farbe={C.muted} />}
-                  {unbest(l) && <Tag text="Noch offen" farbe={C.rose} />}
-                  {!l.istLehrer && l.status !== "ausgefallen" && <Tag text="Ausgetragen · Vertretung gesucht" farbe={C.rose} />}
-                </div>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {l.status === "geplant" && vergangen(l) && l.istLehrer === profil.id && (
-                    <Knopf klein variante="voll" onClick={() => aendern(l, { status: "gehalten" })}>
-                      Gehalten
-                    </Knopf>
-                  )}
-                  {!l.istLehrer && (
-                    <Knopf klein onClick={() => aendern(l, { ist_lehrer: profil.id })}>
-                      Doch übernehmen
-                    </Knopf>
-                  )}
-                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && !vergangen(l) && (
-                    <Knopf klein variante="warn" onClick={() => aendern(l, { ist_lehrer: null })}>
-                      Kann nicht
-                    </Knopf>
-                  )}
-                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && vergangen(l) && (
-                    <Knopf klein variante="warn" onClick={() => aendern(l, { ist_lehrer: null, status: "geplant" })}>
-                      Doch nicht gegeben
-                    </Knopf>
-                  )}
-                  {l.istLehrer === profil.id && l.status !== "ausgefallen" && !vergangen(l) && (
-                    <Knopf klein variante="warn" onClick={() => aendern(l, { status: "ausgefallen", bemerkung: "Ausfall" })}>
-                      Fällt aus
-                    </Knopf>
-                  )}
-                  {l.istLehrer === profil.id && l.status === "ausgefallen" && (
-                    <Knopf klein onClick={() => aendern(l, { status: "geplant", bemerkung: "" })}>
-                      Reaktivieren
-                    </Knopf>
-                  )}
-                </div>
-              </div>
-              {speichernFehler[l.id] && (
-                <p style={{ color: C.rose, fontSize: 12, margin: "6px 0 0 16px" }}>
-                  Konnte nicht gespeichert werden: {speichernFehler[l.id]}
-                </p>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {eigeneListe.length > 0 && (
+        <>
+          <h3 className="display" style={{ fontSize: 18, margin: "0 0 14px" }}>
+            Eigene Stunden
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>{eigeneListe.map(renderLektion)}</div>
+        </>
+      )}
+
+      {vertretungenListe.length > 0 && (
+        <>
+          <h3 className="display" style={{ fontSize: 18, margin: "24px 0 14px" }}>
+            Vertretungen
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>{vertretungenListe.map(renderLektion)}</div>
+        </>
+      )}
 
       {meineAnlaesse.length > 0 && (
         <>
