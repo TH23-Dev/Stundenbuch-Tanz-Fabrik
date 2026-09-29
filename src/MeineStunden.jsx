@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { C, eingabeStil } from "./theme";
 import { Tag, Knopf, karteStil } from "./ui";
-import { iso, datumLabel, datumVoll, wochentag, monatsGrenzen, istVergangen } from "./lib/datum";
+import { iso, datumLabel, datumVoll, wochentag, meineStundenZeitraum, istVergangen } from "./lib/datum";
 import { std } from "./lib/lohn";
 import { speichereLektionStatus, ladeAktuelleLektionen, ladeOffeneEigeneLektionen } from "./lib/lektionen";
 import { satzAmDatum } from "./lib/saetze";
@@ -35,7 +35,7 @@ export default function MeineStunden({ profil, session }) {
   const [absLaeuft, setAbsLaeuft] = useState(false);
   const [abwesenheitenHistorie, setAbwesenheitenHistorie] = useState([]);
 
-  const { jahr, monatIndex, tageImMonat, von, bis } = useMemo(() => monatsGrenzen(), []);
+  const { jahr, monatIndex, von, bis, erweitert } = useMemo(() => meineStundenZeitraum(), []);
 
   useEffect(() => {
     let aktiv = true;
@@ -140,8 +140,10 @@ export default function MeineStunden({ profil, session }) {
   const lektionen = useMemo(() => {
     const liste = [];
     const kurse = Object.values(kurseById);
-    for (let t = 1; t <= tageImMonat; t++) {
-      const d = new Date(jahr, monatIndex, t, 12);
+    // Über den echten Datumsbereich iterieren statt über "Tage im Monat" --
+    // von/bis kann in der letzten Woche des Monats auch schon den ganzen
+    // Folgemonat mit umfassen (meineStundenZeitraum).
+    for (let d = new Date(von + "T12:00"); d <= new Date(bis + "T12:00"); d.setDate(d.getDate() + 1)) {
       const datum = iso(d);
       const wt = wochentag(d);
       kurse.forEach((k) => {
@@ -159,7 +161,7 @@ export default function MeineStunden({ profil, session }) {
     return liste
       .filter((l) => l.istLehrer === profil.id || l.sollLehrer === profil.id)
       .sort((a, b) => a.datum.localeCompare(b.datum) || K(a.kursId).zeit.localeCompare(K(b.kursId).zeit));
-  }, [kurseById, overrides, profil.id, jahr, monatIndex, tageImMonat]);
+  }, [kurseById, overrides, profil.id, von, bis]);
 
   // Für die Lehrperson klar getrennt statt alles in einer Liste vermischt
   // (Feedback): eigene Kurse zuerst, dann Vertretungen für andere. Eine
@@ -460,8 +462,17 @@ export default function MeineStunden({ profil, session }) {
   return (
     <div>
       <h2 className="display" style={{ fontSize: 21, margin: "0 0 14px" }}>
-        Meine Stunden · {new Date(jahr, monatIndex, 1).toLocaleDateString("de-CH", { month: "long", year: "numeric" })}
+        Meine Stunden ·{" "}
+        {erweitert
+          ? `${new Date(jahr, monatIndex, 1).toLocaleDateString("de-CH", { month: "long" })} – ${new Date(jahr, monatIndex + 1, 1).toLocaleDateString("de-CH", { month: "long", year: "numeric" })}`
+          : new Date(jahr, monatIndex, 1).toLocaleDateString("de-CH", { month: "long", year: "numeric" })}
       </h2>
+      {erweitert && (
+        <p style={{ color: C.inkSoft, fontSize: 12, marginTop: -10, marginBottom: 14 }}>
+          Es ist bereits die letzte Woche des Monats — der Folgemonat wird schon mit angezeigt, damit du bei Bedarf
+          frühzeitig "Kann nicht" oder "Fällt aus" nutzen kannst.
+        </p>
+      )}
 
       <div style={{ ...karteStil, gap: 8, flexWrap: "wrap", marginBottom: 16, background: "#FBFAFD" }}>
         <strong style={{ fontSize: 13 }}>Abwesenheit melden</strong>

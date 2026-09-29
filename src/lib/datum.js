@@ -67,3 +67,16 @@ export const aktuellerMonat = () => {
   const { jahr, monatIndex } = monatsGrenzen();
   return `${jahr}-${String(monatIndex + 1).padStart(2, "0")}`;
 };
+
+// Zeitraum für "Meine Stunden": normalerweise der laufende Kalendermonat.
+// In dessen letzten 7 Tagen zusätzlich den ganzen Folgemonat mit dazu --
+// damit eine Lehrperson, die schon jetzt weiss, dass sie z.B. am 1. des
+// Folgemonats nicht kann, "Kann nicht"/"Fällt aus" direkt nutzen kann,
+// statt bis zum Monatswechsel warten zu müssen.
+export function meineStundenZeitraum(heute = new Date()) {
+  const monat = monatsGrenzen(heute);
+  const inLetzterWoche = heute.getDate() > monat.tageImMonat - 7;
+  if (!inLetzterWoche) return { ...monat, erweitert: false };
+  const folgeLetzterTag = new Date(monat.jahr, monat.monatIndex + 2, 0);
+  return { ...monat, bis: iso(folgeLetzterTag), erweitert: true };
+}
