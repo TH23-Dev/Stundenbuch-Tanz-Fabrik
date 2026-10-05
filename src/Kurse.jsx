@@ -6,7 +6,15 @@ import { iso, TAGE } from "./lib/datum";
 
 const KURS_FELDER = "id,wochentag,zeit,dauer_min,bezeichnung,standort_code,lehrer_id,ansatz,gueltig_von,gueltig_bis";
 
-const LEER_NEUER_KURS = { tag: 1, zeit: "18:00", dauer: 55, bezeichnung: "", ort: "", lehrerId: "", ansatz: "", von: iso(new Date()) };
+// "Gültig ab" standardmässig MORGEN, nicht heute: "Beenden" lässt den alten
+// Kurs bis und mit heute gelten. Ein neuer Kurs ab heute überschneidet sich
+// damit am selben Tag mit dem alten -- das gäbe an diesem Tag zwei Lektionen
+// (so entstanden doppelte Stunden bei einem Lehrerwechsel).
+const leerNeuerKurs = () => {
+  const morgen = new Date();
+  morgen.setDate(morgen.getDate() + 1);
+  return { tag: 1, zeit: "18:00", dauer: 55, bezeichnung: "", ort: "", lehrerId: "", ansatz: "", von: iso(morgen) };
+};
 
 export default function Kurse() {
   const [laden, setLaden] = useState(true);
@@ -15,7 +23,7 @@ export default function Kurse() {
   const [kurse, setKurse] = useState([]);
   const [orte, setOrte] = useState({});
   const [lehrpersonen, setLehrpersonen] = useState([]);
-  const [neuerKurs, setNeuerKurs] = useState(LEER_NEUER_KURS);
+  const [neuerKurs, setNeuerKurs] = useState(leerNeuerKurs);
   const [neuerStandort, setNeuerStandort] = useState({ code: "", name: "" });
   const [zeigeBeendete, setZeigeBeendete] = useState(false);
 

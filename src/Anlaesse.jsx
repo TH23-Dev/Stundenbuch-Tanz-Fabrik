@@ -10,6 +10,7 @@ export default function Anlaesse() {
   const [laden, setLaden] = useState(true);
   const [ladeFehler, setLadeFehler] = useState("");
   const [aktionFehler, setAktionFehler] = useState("");
+  const [aktionMeldung, setAktionMeldung] = useState("");
 
   const [orte, setOrte] = useState({});
   const [lehrpersonen, setLehrpersonen] = useState([]);
@@ -101,6 +102,18 @@ export default function Anlaesse() {
   async function anlassHinzufuegen() {
     if (!neuerAnlass.titel || !neuerAnlass.ort) return;
     setAktionFehler("");
+    setAktionMeldung("");
+    // Doppelt-Eintragen verhindern: gibt es denselben Anlass (Datum, Titel,
+    // Standort) schon -- egal in welchem Monat -- vor dem Anlegen nachfragen.
+    const { data: schonDa } = await supabase
+      .from("anlaesse")
+      .select("id")
+      .eq("datum", neuerAnlass.datum)
+      .eq("titel", neuerAnlass.titel)
+      .eq("standort_code", neuerAnlass.ort);
+    if (schonDa && schonDa.length > 0) {
+      if (!window.confirm(`Einen Anlass "${neuerAnlass.titel}" am ${datumLabel(neuerAnlass.datum)} an diesem Standort gibt es bereits (${schonDa.length}x).\n\nTrotzdem nochmals anlegen?`)) return;
+    }
     const { data, error } = await supabase
       .from("anlaesse")
       .insert({
@@ -120,8 +133,19 @@ export default function Anlaesse() {
       setAktionFehler(error.message);
       return;
     }
-    setAnlaesseListe((prev) => [...prev, data].sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit)));
     setNeuerAnlass((a) => ({ ...a, titel: "", pauschale: "" }));
+    const anlassMonat = data.datum.slice(0, 7);
+    if (anlassMonat !== monat) {
+      // Die Liste zeigt immer nur einen Monat. Liegt der neue Anlass in einem
+      // anderen Monat als dem angezeigten, wäre er sonst beim nächsten
+      // Laden "verschwunden" (so wurde ein Camp mehrfach eingetragen) --
+      // deshalb direkt zu seinem Monat wechseln.
+      setMonat(anlassMonat);
+      setAktionMeldung(`Anlass "${data.titel}" wurde für ${datumLabel(data.datum)} angelegt. Du siehst jetzt den Monat ${anlassMonat}.`);
+      return;
+    }
+    setAktionMeldung(`Anlass "${data.titel}" angelegt.`);
+    setAnlaesseListe((prev) => [...prev, data].sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit)));
   }
 
   // Zusätzliche Lehrpersonen pro Anlass, jede mit eigenem Betrag -- reine
@@ -179,6 +203,7 @@ export default function Anlaesse() {
       </p>
 
       {aktionFehler && <p style={{ color: C.rose, fontSize: 13, marginBottom: 14 }}>{aktionFehler}</p>}
+      {aktionMeldung && <p style={{ color: C.teal, fontSize: 13, marginBottom: 14 }}>{aktionMeldung}</p>}
 
       <div style={{ ...karteStil, gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
         <input type="date" value={neuerAnlass.datum} onChange={(e) => setNeuerAnlass({ ...neuerAnlass, datum: e.target.value })} style={{ ...eingabeStil, width: "auto" }} />

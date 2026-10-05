@@ -167,6 +167,15 @@ export default function MeineStunden({ profil, session }) {
   // (Feedback): eigene Kurse zuerst, dann Vertretungen für andere. Eine
   // Lektion ist in genau einer der beiden Gruppen, "lektionen" oben enthält
   // ohnehin nur, wo istLehrer oder sollLehrer die eigene Person ist.
+  // Anlässe: nicht an den Kalendermonat gebunden geladen (siehe oben), hier
+  // aber aufräumen -- Anlässe aus früheren Monaten bleiben nur sichtbar,
+  // solange sie noch unbestätigt sind (damit man sie noch bestätigen kann).
+  // Bestätigte/ausgefallene aus Vormonaten verschwinden; laufende und
+  // künftige Anlässe bleiben wie bisher alle sichtbar.
+  const sichtbareAnlaesse = useMemo(
+    () => meineAnlaesse.filter((a) => a.datum >= von || anlassUnbest(a)),
+    [meineAnlaesse, von]
+  );
   const eigeneListe = useMemo(() => lektionen.filter((l) => l.sollLehrer === profil.id), [lektionen, profil.id]);
   const vertretungenListe = useMemo(() => lektionen.filter((l) => l.sollLehrer !== profil.id), [lektionen, profil.id]);
 
@@ -558,13 +567,13 @@ export default function MeineStunden({ profil, session }) {
         </>
       )}
 
-      {meineAnlaesse.length > 0 && (
+      {sichtbareAnlaesse.length > 0 && (
         <>
           <h3 className="display" style={{ fontSize: 18, margin: "24px 0 14px" }}>
             Meine Anlässe
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {meineAnlaesse.map((a) => (
+            {sichtbareAnlaesse.map((a) => (
               <div key={a.id} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
                 <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <div
