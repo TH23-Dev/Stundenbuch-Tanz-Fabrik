@@ -27,6 +27,7 @@ export default function MeineStunden({ profil, session }) {
   const [meineAnlaesse, setMeineAnlaesse] = useState([]);
   const [anlassFehler, setAnlassFehler] = useState({});
   const [lehrerNamen, setLehrerNamen] = useState({});
+  const [abgegeben, setAbgegeben] = useState([]);
 
   const [absVon, setAbsVon] = useState("");
   const [absBis, setAbsBis] = useState("");
@@ -78,7 +79,7 @@ export default function MeineStunden({ profil, session }) {
       setAbwesenheitenHistorie(abwesenheitData || []);
 
       const meineIds = meineKurse.map((k) => k.id);
-      const [{ data: statusEigene, error: se1 }, { data: statusVertretung, error: se2 }] = await Promise.all([
+      const [{ data: statusEigene, error: se1 }, { data: statusVertretung, error: se2 }, { data: statusAbgegeben, error: se3 }] = await Promise.all([
         supabase
           .from("lektion_status")
           .select("kurs_id,datum,ist_lehrer,status,bemerkung")
@@ -91,6 +92,15 @@ export default function MeineStunden({ profil, session }) {
           .eq("ist_lehrer", profil.id)
           .gte("datum", von)
           .lte("datum", bis),
+        // Lektionen, die ich zuletzt abgegeben habe (Spalte abgegeben_von, siehe
+        // 09_abgegeben_von.sql). Bewusst fehlertolerant: nur eine Zusatz-Anzeige,
+        // soll "Meine Stunden" nie lahmlegen -- z.B. solange die Spalte noch fehlt.
+        supabase
+          .from("lektion_status")
+          .select("kurs_id,datum,ist_lehrer,status")
+          .eq("abgegeben_von", profil.id)
+          .gte("datum", von)
+          .lte("datum", bis),
       ]);
       if (!aktiv) return;
       if (se1 || se2) {
@@ -98,8 +108,14 @@ export default function MeineStunden({ profil, session }) {
         setLaden(false);
         return;
       }
+      const abgegebeneRows = se3 ? [] : (statusAbgegeben || []).filter((s) => s.ist_lehrer !== profil.id);
+      setAbgegeben(abgegebeneRows);
 
-      const fremdeIds = [...new Set((statusVertretung || []).map((s) => s.kurs_id).filter((id) => !meineIds.includes(id)))];
+      const fremdeIds = [
+        ...new Set(
+          [...(statusVertretung || []), ...abgegebeneRows].map((s) => s.kurs_id).filter((id) => !meineIds.includes(id))
+        ),
+      ];
       let fremdeKurse = [];
       if (fremdeIds.length) {
         const { data, error } = await supabase.from("kurse").select(FREMDE_KURS_FELDER).in("id", fremdeIds);
@@ -175,6 +191,17 @@ export default function MeineStunden({ profil, session }) {
   const sichtbareAnlaesse = useMemo(
     () => meineAnlaesse.filter((a) => a.datum >= von || anlassUnbest(a)),
     [meineAnlaesse, von]
+  );
+  // Stunden, die ich als Vertretung hatte und die nicht mehr bei mir sind
+  // (zurückgegeben, neu zugeteilt): ich sehe, ob sie noch offen sind oder wer
+  // sie übernommen hat. Eigene Kurse gehören nicht hierher -- dort zeigt
+  // "Eigene Stunden" das schon ("Übernommen von ..."). Ausgefallene entfallen.
+  const abgegebeneListe = useMemo(
+    () =>
+      abgegeben
+        .filter((s) => kurseById[s.kurs_id] && kurseById[s.kurs_id].lehrer_id !== profil.id && s.status !== "ausgefallen")
+        .sort((a, b) => a.datum.localeCompare(b.datum) || kurseById[a.kurs_id].zeit.localeCompare(kurseById[b.kurs_id].zeit)),
+    [abgegeben, kurseById, profil.id]
   );
   const eigeneListe = useMemo(() => lektionen.filter((l) => l.sollLehrer === profil.id), [lektionen, profil.id]);
   const vertretungenListe = useMemo(() => lektionen.filter((l) => l.sollLehrer !== profil.id), [lektionen, profil.id]);
@@ -564,6 +591,44 @@ export default function MeineStunden({ profil, session }) {
             Vertretungen
           </h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>{vertretungenListe.map(renderLektion)}</div>
+        </>
+      )}
+
+      {abgegebeneListe.length > 0 && (
+        <>
+          <h3 className="display" style={{ fontSize: 18, margin: "24px 0 4px" }}>
+            Nicht mehr bei dir
+          </h3>
+          <p style={{ color: C.inkSoft, fontSize: 12, margin: "0 0 14px" }}>
+            Vertretungs-Stunden, die du abgegeben hast oder die neu vergeben wurden — hier siehst du, ob sie noch
+            offen sind oder wer sie übernommen hat.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {abgegebeneListe.map((s) => {
+              const k = K(s.kurs_id);
+              return (
+                <div key={`${s.kurs_id}|${s.datum}`} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ width: 4, borderRadius: 2, alignSelf: "stretch", minHeight: 32, flexShrink: 0, background: s.ist_lehrer ? C.line : C.rose }} />
+                    <div style={{ flex: 1, minWidth: 0, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <span className="mono" style={{ fontSize: 13, color: C.inkSoft }}>
+                        {datumLabel(s.datum)} · {k.zeit}
+                      </span>
+                      <strong style={{ fontSize: 14 }}>{k.bezeichnung}</strong>
+                      <span style={{ fontSize: 12, color: C.inkSoft }}>
+                        {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′
+                      </span>
+                      {s.ist_lehrer ? (
+                        <Tag text={`Übernommen von ${namePerson(s.ist_lehrer)}`} farbe={C.brass} />
+                      ) : (
+                        <Tag text="Noch offen · Vertretung gesucht" farbe={C.rose} />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </>
       )}
 
