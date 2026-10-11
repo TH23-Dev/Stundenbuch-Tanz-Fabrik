@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { C } from "./theme";
 import { Knopf, karteStil } from "./ui";
-import { datumLabel, meineStundenZeitraum } from "./lib/datum";
+import { datumLabel, meineStundenZeitraum, wochentag, istVergangen } from "./lib/datum";
 import { speichereLektionStatus } from "./lib/lektionen";
 
 // Kein `ansatz` hier: Vertretung wird immer mit dem persönlichen
@@ -111,13 +111,29 @@ export default function OffeneStunden({ profil, session }) {
     };
   }, [profil.id, von, bis]);
 
-  const liste = useMemo(
+  // Eine offene Zeile zählt nur, wenn der Kurs an diesem Datum wirklich
+  // stattfindet (Wochentag und Gültigkeit). Sonst erscheinen "Phantom"-Stunden
+  // von beendeten oder ersetzten Kursen (z.B. nach einem Kurswechsel blieb
+  // eine alte offene Zeile stehen), die man dann fälschlich übernehmen könnte.
+  const kursGiltAm = (k, datum) =>
+    k.gueltig_von <= datum && (!k.gueltig_bis || k.gueltig_bis >= datum) && wochentag(new Date(datum + "T12:00")) === k.wochentag;
+  const lektionVorbei = (o) => {
+    const k = kurseById[o.kurs_id];
+    return istVergangen(o.datum, k.zeit, k.dauer_min);
+  };
+  const alleOffenen = useMemo(
     () =>
       offene
-        .filter((o) => kurseById[o.kurs_id] && !uebernommen[`${o.kurs_id}|${o.datum}`])
+        .filter((o) => kurseById[o.kurs_id] && kursGiltAm(kurseById[o.kurs_id], o.datum) && !uebernommen[`${o.kurs_id}|${o.datum}`])
         .sort((a, b) => a.datum.localeCompare(b.datum) || kurseById[a.kurs_id].zeit.localeCompare(kurseById[b.kurs_id].zeit)),
     [offene, kurseById, uebernommen]
   );
+  const istBackoffice = !!(profil.r_lohn || profil.r_admin);
+  // Lehrpersonen sehen nur Stunden, die noch bevorstehen. Bereits vorbei:
+  // nicht mehr zur Übernahme anbieten (sonst wird nachträglich bezahlt, was
+  // niemand mehr nachprüfen kann) -- das ordnet das Backoffice zu.
+  const liste = useMemo(() => alleOffenen.filter((o) => !lektionVorbei(o)), [alleOffenen, kurseById]);
+  const vergangeneListe = useMemo(() => (istBackoffice ? alleOffenen.filter(lektionVorbei) : []), [alleOffenen, kurseById, istBackoffice]);
 
   async function uebernehmen(o) {
     const key = `${o.kurs_id}|${o.datum}`;
@@ -246,6 +262,50 @@ export default function OffeneStunden({ profil, session }) {
           );
         })}
       </div>
+
+      {vergangeneListe.length > 0 && (
+        <>
+          <h3 className="display" style={{ fontSize: 18, margin: "24px 0 6px" }}>
+            Vergangen und nicht besetzt
+          </h3>
+          <p style={{ color: C.inkSoft, fontSize: 13, marginTop: 0, marginBottom: 14 }}>
+            Nur für Backoffice sichtbar. Diese Stunden sind schon vorbei und hatte niemand mehr. Haben sie stattgefunden,
+            teilst du sie bei «Lektionen verwalten» der Person zu, die sie gehalten hat. Sind sie ausgefallen, mit
+            «Ganz absagen» entfernen.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {vergangeneListe.map((o) => {
+              const key = `${o.kurs_id}|${o.datum}`;
+              const k = kurseById[o.kurs_id];
+              const soll = personen[k.lehrer_id];
+              return (
+                <div key={key} style={{ flexDirection: "column", alignItems: "stretch", ...karteStil, width: "100%", minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ width: 4, borderRadius: 2, background: C.line, alignSelf: "stretch", minHeight: 32 }} />
+                    <div style={{ flex: 1 }}>
+                      <div className="mono" style={{ fontSize: 13, color: C.inkSoft }}>
+                        {datumLabel(o.datum)} · {k.zeit}
+                      </div>
+                      <strong style={{ fontSize: 14 }}>{k.bezeichnung}</strong>
+                      <span style={{ fontSize: 12, color: C.inkSoft }}>
+                        {" "}
+                        · {orte[k.standort_code] || k.standort_code} · {k.dauer_min}′ · sonst{" "}
+                        {soll ? `${soll.vorname} ${soll.nachname}` : "—"}
+                      </span>
+                    </div>
+                    <Knopf klein variante="warn" onClick={() => absagen(o)}>
+                      Ganz absagen
+                    </Knopf>
+                  </div>
+                  {speichernFehler[key] && (
+                    <p style={{ color: C.rose, fontSize: 12, margin: "6px 0 0 16px" }}>Konnte nicht gespeichert werden: {speichernFehler[key]}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       <h3 className="display" style={{ fontSize: 18, margin: "24px 0 6px" }}>
         Offene Anlässe
