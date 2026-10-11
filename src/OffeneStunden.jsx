@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "./supabaseClient";
 import { C } from "./theme";
 import { Knopf, karteStil } from "./ui";
-import { datumLabel, monatsGrenzen } from "./lib/datum";
+import { datumLabel, meineStundenZeitraum } from "./lib/datum";
 import { speichereLektionStatus } from "./lib/lektionen";
 
 // Kein `ansatz` hier: Vertretung wird immer mit dem persönlichen
@@ -22,7 +22,10 @@ export default function OffeneStunden({ profil, session }) {
   const [anlassFehler, setAnlassFehler] = useState({});
   const [anlassUebernommen, setAnlassUebernommen] = useState({});
 
-  const { von, bis } = useMemo(() => monatsGrenzen(), []);
+  // Gleicher Zeitraum wie "Meine Stunden": laufender Monat, in dessen letzter
+  // Woche zusätzlich der Folgemonat. Sonst wären freigegebene Stunden des
+  // Folgemonats dort zwar sichtbar, aber hier nicht zur Übernahme auffindbar.
+  const { von, bis } = useMemo(() => meineStundenZeitraum(), []);
 
   useEffect(() => {
     let aktiv = true;
