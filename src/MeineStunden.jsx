@@ -16,6 +16,10 @@ import { protokolliereAbwesenheit } from "./lib/abwesenheiten";
 const FREMDE_KURS_FELDER = "id,wochentag,zeit,dauer_min,bezeichnung,standort_code,gueltig_von,gueltig_bis,lehrer_id";
 const EIGENE_KURS_FELDER = FREMDE_KURS_FELDER + ",ansatz";
 
+// Erscheint, wenn eine Änderung an einem Anlass nichts bewirkt hat -- die
+// Datenbank sperrt Anlässe abgeschlossener Monate, ohne einen Fehler zu melden.
+const ANLASS_GESPERRT = "Der Monat dieses Anlasses ist bereits abgeschlossen. Bitte melde dich beim Backoffice.";
+
 export default function MeineStunden({ profil, session }) {
   const [laden, setLaden] = useState(true);
   const [ladeFehler, setLadeFehler] = useState("");
@@ -250,10 +254,13 @@ export default function MeineStunden({ profil, session }) {
   async function anlassAendern(a, changes) {
     setAnlassFehler((prev) => ({ ...prev, [a.id]: null }));
     setMeineAnlaesse((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...changes } : x)));
-    const { error } = await supabase.from("anlaesse").update(changes).eq("id", a.id);
-    if (error) {
+    // count: Liegt der Anlass in einem abgeschlossenen Monat, ändert die
+    // Datenbank nichts, meldet aber keinen Fehler (0 Zeilen). Ohne Zählung
+    // sähe es bestätigt aus und wäre nach dem Neuladen wieder offen.
+    const { error, count } = await supabase.from("anlaesse").update(changes, { count: "exact" }).eq("id", a.id);
+    if (error || count === 0) {
       setMeineAnlaesse((prev) => prev.map((x) => (x.id === a.id ? a : x)));
-      setAnlassFehler((prev) => ({ ...prev, [a.id]: error.message }));
+      setAnlassFehler((prev) => ({ ...prev, [a.id]: error ? error.message : ANLASS_GESPERRT }));
     }
   }
 
@@ -265,10 +272,10 @@ export default function MeineStunden({ profil, session }) {
   async function anlassFreigeben(a) {
     setAnlassFehler((prev) => ({ ...prev, [a.id]: null }));
     setMeineAnlaesse((prev) => prev.filter((x) => x.id !== a.id));
-    const { error } = await supabase.from("anlaesse").update({ lehrer_id: null, status: "offen" }).eq("id", a.id);
-    if (error) {
+    const { error, count } = await supabase.from("anlaesse").update({ lehrer_id: null, status: "offen" }, { count: "exact" }).eq("id", a.id);
+    if (error || count === 0) {
       setMeineAnlaesse((prev) => [...prev, a].sort((x, y) => x.datum.localeCompare(y.datum) || x.zeit.localeCompare(y.zeit)));
-      setAnlassFehler((prev) => ({ ...prev, [a.id]: error.message }));
+      setAnlassFehler((prev) => ({ ...prev, [a.id]: error ? error.message : ANLASS_GESPERRT }));
     }
   }
 

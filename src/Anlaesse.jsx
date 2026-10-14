@@ -80,18 +80,26 @@ export default function Anlaesse() {
   async function anlassAendern(a, changes) {
     setAktionFehler("");
     setAnlaesseListe((prev) => prev.map((x) => (x.id === a.id ? { ...x, ...changes } : x)));
-    const { error } = await supabase.from("anlaesse").update(changes).eq("id", a.id);
-    if (error) {
+    // count: Liegt der Anlass in einem abgeschlossenen Monat, ändert die
+    // Datenbank nichts, meldet aber keinen Fehler (0 Zeilen). Ohne Zählung
+    // sähe das Ganze gespeichert aus.
+    const { error, count } = await supabase.from("anlaesse").update(changes, { count: "exact" }).eq("id", a.id);
+    if (error || count === 0) {
       setAnlaesseListe((prev) => prev.map((x) => (x.id === a.id ? a : x)));
-      setAktionFehler(error.message);
+      setAktionFehler(
+        error
+          ? error.message
+          : `Nicht gespeichert: Der Monat von "${a.titel}" (${datumLabel(a.datum)}) ist vermutlich schon abgeschlossen und kann nicht mehr geändert werden.`
+      );
     }
   }
 
   // Bestätigt einen Anlass stellvertretend für die zugeteilte Lehrperson
-  // (Backoffice/Anlässe). Anlässe sind nicht monatsgesperrt -- liegt das
-  // Datum in einem bereits abgeschlossenen Monat, würde die Bestätigung die
-  // Abrechnung dieses Monats rückwirkend verändern, deshalb vorher fragen.
-  // (Wer die Abschluss-Tabelle nicht lesen darf, bekommt keine Rückfrage.)
+  // (Backoffice/Anlässe). Auch Anlässe sind monatsgesperrt (RLS-Policy
+  // anlass_update): in einem abgeschlossenen Monat lässt sich nichts mehr
+  // ändern. Deshalb vorher prüfen und erklären, statt still zu scheitern.
+  // (Wer die Abschluss-Tabelle nicht lesen darf, erhält stattdessen die
+  // Meldung aus anlassAendern, falls nichts gespeichert wurde.)
   async function anlassBestaetigen(a) {
     setAktionFehler("");
     setAktionMeldung("");
@@ -101,10 +109,10 @@ export default function Anlaesse() {
       .eq("monat", a.datum.slice(0, 7))
       .maybeSingle();
     if (abschluss) {
-      const ok = window.confirm(
-        `Der Monat ${a.datum.slice(0, 7)} ist bereits abgeschlossen.\n\nWenn du "${a.titel}" jetzt bestätigst, verändert das die Abrechnung dieses Monats rückwirkend (sie wurde vielleicht schon ausbezahlt).\n\nTrotzdem bestätigen?`
+      setAktionFehler(
+        `Der Monat ${a.datum.slice(0, 7)} ist abgeschlossen: "${a.titel}" kann hier nicht mehr bestätigt werden. Soll der Anlass trotzdem verrechnet werden, muss sein Datum in einen offenen Monat verschoben werden (über die Datenbank).`
       );
-      if (!ok) return;
+      return;
     }
     anlassAendern(a, { status: "gehalten" });
   }

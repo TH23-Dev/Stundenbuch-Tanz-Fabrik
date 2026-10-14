@@ -192,14 +192,22 @@ export default function OffeneStunden({ profil, session }) {
   async function anlassUebernehmen(a) {
     setAnlassUebernommen((prev) => ({ ...prev, [a.id]: true }));
     setAnlassFehler((prev) => ({ ...prev, [a.id]: null }));
-    const { error } = await supabase.from("anlaesse").update({ lehrer_id: profil.id, status: "geplant" }).eq("id", a.id);
-    if (error) {
+    // count: In einem abgeschlossenen Monat ändert die Datenbank nichts und
+    // meldet auch keinen Fehler (0 Zeilen) -- sonst sähe der Eintrag erledigt aus.
+    const { error, count } = await supabase
+      .from("anlaesse")
+      .update({ lehrer_id: profil.id, status: "geplant" }, { count: "exact" })
+      .eq("id", a.id);
+    if (error || count === 0) {
       setAnlassUebernommen((prev) => {
         const rest = { ...prev };
         delete rest[a.id];
         return rest;
       });
-      setAnlassFehler((prev) => ({ ...prev, [a.id]: error.message }));
+      setAnlassFehler((prev) => ({
+        ...prev,
+        [a.id]: error ? error.message : "Der Monat dieses Anlasses ist bereits abgeschlossen. Bitte melde dich beim Backoffice.",
+      }));
     }
   }
 
