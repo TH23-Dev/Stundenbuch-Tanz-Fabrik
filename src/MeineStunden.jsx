@@ -79,7 +79,34 @@ export default function MeineStunden({ profil, session }) {
       const namenMap = {};
       (personenData || []).forEach((p) => (namenMap[p.id] = `${p.vorname} ${p.nachname}`));
       setLehrerNamen(namenMap);
-      setMeineAnlaesse((anlaesseData || []).sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit)));
+      // Anlässe, bei denen ich nicht Hauptperson, sondern im Team bin
+      // (anlass_teilnehmer, eigener Betrag). Nur zur Anzeige -- bestätigen
+      // können nur Hauptperson/Backoffice. Der Anlass selbst kommt über die
+      // View ohne Pauschale (die Basistabelle darf ich als Teammitglied nicht
+      // lesen). Fehlertolerant: eine Zusatz-Anzeige soll "Meine Stunden" nie
+      // lahmlegen.
+      let teamAnlaesse = [];
+      const { data: teamZeilen, error: teamErr } = await supabase
+        .from("anlass_teilnehmer")
+        .select("anlass_id,betrag")
+        .eq("lehrer_id", profil.id);
+      if (!teamErr && teamZeilen && teamZeilen.length > 0) {
+        const { data: teamAnlassData, error: teamAnlassErr } = await supabase
+          .from("v_anlaesse_ohne_betrag")
+          .select("id,datum,zeit,titel,standort_code,typ,lehrer_id,status")
+          .in("id", teamZeilen.map((t) => t.anlass_id));
+        if (!teamAnlassErr) {
+          const betragById = {};
+          teamZeilen.forEach((t) => (betragById[t.anlass_id] = t.betrag));
+          teamAnlaesse = (teamAnlassData || [])
+            .filter((a) => a.lehrer_id !== profil.id)
+            .map((a) => ({ ...a, pauschale: betragById[a.id], istTeam: true }));
+        }
+      }
+      if (!aktiv) return;
+      setMeineAnlaesse(
+        [...(anlaesseData || []), ...teamAnlaesse].sort((a, b) => a.datum.localeCompare(b.datum) || a.zeit.localeCompare(b.zeit))
+      );
       setAbwesenheitenHistorie(abwesenheitData || []);
 
       const meineIds = meineKurse.map((k) => k.id);
@@ -665,23 +692,29 @@ export default function MeineStunden({ profil, session }) {
                     <strong style={{ fontSize: 14 }}>{a.titel}</strong>
                     <Tag text={a.typ} farbe={C.brass} />
                     <span style={{ fontSize: 12, color: C.inkSoft }}>
-                      {orte[a.standort_code] || a.standort_code} · Pauschale CHF {a.pauschale}.–
+                      {orte[a.standort_code] || a.standort_code} · {a.istTeam ? "Dein Betrag" : "Pauschale"} CHF {a.pauschale}.–
                     </span>
+                    {a.istTeam && <Tag text="Im Team" farbe={C.brass} />}
                     {a.status === "gehalten" && <Tag text="Bestätigt" farbe={C.teal} />}
-                    {anlassUnbest(a) && <Tag text="Noch offen" farbe={C.rose} />}
+                    {a.status === "ausgefallen" && <Tag text="Fällt aus" farbe={C.muted} />}
+                    {anlassUnbest(a) && <Tag text={a.istTeam ? "Wartet auf Bestätigung" : "Noch offen"} farbe={C.rose} />}
                   </div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {a.status === "geplant" && anlassVergangen(a) && (
-                      <Knopf klein variante="voll" onClick={() => anlassAendern(a, { status: "gehalten" })}>
-                        Gehalten
-                      </Knopf>
-                    )}
-                    {a.status !== "ausgefallen" && !anlassVergangen(a) && (
-                      <Knopf klein variante="warn" onClick={() => anlassFreigeben(a)}>
-                        Wieder freigeben
-                      </Knopf>
-                    )}
-                  </div>
+                  {/* Team-Mitglieder sehen den Anlass und ihren Betrag, bestätigen oder
+                      freigeben können nur Hauptperson und Backoffice. */}
+                  {!a.istTeam && (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {a.status === "geplant" && anlassVergangen(a) && (
+                        <Knopf klein variante="voll" onClick={() => anlassAendern(a, { status: "gehalten" })}>
+                          Gehalten
+                        </Knopf>
+                      )}
+                      {a.status !== "ausgefallen" && !anlassVergangen(a) && (
+                        <Knopf klein variante="warn" onClick={() => anlassFreigeben(a)}>
+                          Wieder freigeben
+                        </Knopf>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {anlassFehler[a.id] && (
                   <p style={{ color: C.rose, fontSize: 12, margin: "6px 0 0 16px" }}>
