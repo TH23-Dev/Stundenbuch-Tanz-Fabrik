@@ -5,7 +5,7 @@ import { Tag, Knopf, Kennzahl, karteStil } from "./ui";
 import { iso, wochentag, monatsGrenzenFuer, aktuellerMonat, datumLabel, datumVoll, istVergangen } from "./lib/datum";
 import { std, chf } from "./lib/lohn";
 import { satzAmDatum } from "./lib/saetze";
-import { anlassRelevant } from "./lib/anlaesse";
+import { anlassRelevant, anlassUnbest } from "./lib/anlaesse";
 import { speichereLektionStatus } from "./lib/lektionen";
 
 const KURS_FELDER = "id,wochentag,zeit,dauer_min,bezeichnung,standort_code,lehrer_id,ansatz,gueltig_von,gueltig_bis";
@@ -204,6 +204,28 @@ export default function Backoffice({ session }) {
   }, [anlaesseListe, anlassTeilnehmerListe]);
   const alleZusatz = useMemo(() => [...zusatzListe, ...anlassAlsZusatz], [zusatzListe, anlassAlsZusatz]);
 
+  // Anlässe, die schon stattgefunden haben, aber noch nicht bestätigt sind:
+  // sie fliessen NICHT in Abrechnung und Export ein. Bisher fiel das nirgends
+  // auf (die Spalte "Unbestätigt" zählte nur Lektionen), ein ganzes Camp fehlte
+  // deshalb unbemerkt im Lohnfile. Mit allen Beteiligten (Haupt und Team).
+  const unbestaetigteAnlaesse = useMemo(
+    () =>
+      anlaesseListe
+        .filter(anlassUnbest)
+        .map((a) => {
+          const beteiligte = [
+            { rolle: "Haupt", lehrer_id: a.lehrer_id, betrag: Number(a.pauschale) },
+            ...anlassTeilnehmerListe
+              .filter((t) => t.anlass_id === a.id)
+              .map((t) => ({ rolle: "Team", lehrer_id: t.lehrer_id, betrag: Number(t.betrag) })),
+          ];
+          return { a, beteiligte, summe: beteiligte.reduce((s, b) => s + b.betrag, 0) };
+        })
+        .sort((x, y) => x.a.datum.localeCompare(y.a.datum)),
+    [anlaesseListe, anlassTeilnehmerListe]
+  );
+  const unbestAnlaesseSumme = unbestaetigteAnlaesse.reduce((s, u) => s + u.summe, 0);
+
   const auswertung = useMemo(
     () =>
       lehrerListe
@@ -299,6 +321,23 @@ export default function Backoffice({ session }) {
     }
   }
 
+  // Bestätigt einen Anlass direkt aus der Warnung oben. In einem
+  // abgeschlossenen Monat ändert die Datenbank nichts und meldet keinen Fehler
+  // (0 Zeilen), deshalb die Zeilenzahl prüfen statt "gespeichert" vorzutäuschen.
+  async function anlassBestaetigen(a) {
+    setAktionFehler("");
+    const { error, count } = await supabase.from("anlaesse").update({ status: "gehalten" }, { count: "exact" }).eq("id", a.id);
+    if (error || count === 0) {
+      setAktionFehler(
+        error
+          ? error.message
+          : `Nicht gespeichert: Der Monat von "${a.titel}" ist abgeschlossen und kann nicht mehr geändert werden.`
+      );
+      return;
+    }
+    setAnlaesseListe((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: "gehalten" } : x)));
+  }
+
   async function monatAbschliessen() {
     if (!window.confirm(`Monat ${monat} wirklich abschliessen? Danach können keine Lektionen mehr geändert werden.`)) return;
     const { data, error } = await supabase
@@ -314,7 +353,17 @@ export default function Backoffice({ session }) {
   }
 
   async function exportieren() {
+    if (unbestaetigteAnlaesse.length > 0) {
+      const liste = unbestaetigteAnlaesse
+        .map((u) => `• ${datumLabel(u.a.datum)}  ${u.a.titel}  (CHF ${chf(u.summe)})`)
+        .join("\n");
+      const ok = window.confirm(
+        `Achtung: ${unbestaetigteAnlaesse.length} Anlass/Anlässe sind noch NICHT bestätigt und fehlen deshalb im Export (zusammen CHF ${chf(unbestAnlaesseSumme)}):\n\n${liste}\n\nTrotzdem exportieren?`
+      );
+      if (!ok) return;
+    }
     const XLSX = await import("xlsx");
+    const anlassUnbestFuer = (lehrerId) => unbestaetigteAnlaesse.filter((u) => u.beteiligte.some((b) => b.lehrer_id === lehrerId)).length;
     const CHF_FORMAT = '"CHF" #,##0.00';
 
     // Setzt das CHF-Zahlenformat auf die genannten Spalten einer Sheet (per Header-Name).
@@ -363,7 +412,8 @@ export default function Backoffice({ session }) {
       "Betreuung (CHF)": Number(summeTyp(a.p.id, "Betreuung").toFixed(2)),
       "Spesen/Abzug (CHF)": Number(summeManuell(a.p.id).toFixed(2)),
       "Total (CHF)": Number(a.total.toFixed(2)),
-      Unbestätigt: a.unbest,
+      // zählt Lektionen UND noch unbestätigte Anlässe, an denen die Person beteiligt ist
+      Unbestätigt: a.unbest + anlassUnbestFuer(a.p.id),
     }));
     const wsZusammenfassung = XLSX.utils.json_to_sheet(zusammenfassungDaten, { header: zusammenfassungHeader });
     waehrungsformatSetzen(
@@ -423,6 +473,24 @@ export default function Backoffice({ session }) {
     waehrungsformatSetzen(wsZusatz, zusatzHeader, ["Betrag (CHF)"], zusatzDaten.length);
     XLSX.utils.book_append_sheet(wb, wsZusatz, "Zusatzpositionen");
 
+    // Damit die Lücke auch im Lohnfile selbst sichtbar ist, nicht nur beim Exportieren:
+    if (unbestaetigteAnlaesse.length > 0) {
+      const unbestHeader = ["Datum", "Titel", "Typ", "Person", "Rolle", "Betrag (CHF)"];
+      const unbestDaten = unbestaetigteAnlaesse.flatMap((u) =>
+        u.beteiligte.map((b) => ({
+          Datum: datumVoll(u.a.datum),
+          Titel: u.a.titel,
+          Typ: u.a.typ,
+          Person: name(b.lehrer_id),
+          Rolle: b.rolle,
+          "Betrag (CHF)": b.betrag,
+        }))
+      );
+      const wsUnbest = XLSX.utils.json_to_sheet(unbestDaten, { header: unbestHeader });
+      waehrungsformatSetzen(wsUnbest, unbestHeader, ["Betrag (CHF)"], unbestDaten.length);
+      XLSX.utils.book_append_sheet(wb, wsUnbest, "NICHT enthalten (Anlässe)");
+    }
+
     XLSX.writeFile(wb, `Lehrerabrechnung_${monat}${vorschauModus ? "_VORSCHAU" : ""}.xlsx`);
   }
 
@@ -477,6 +545,38 @@ export default function Backoffice({ session }) {
         <Kennzahl label="Offene Stunden" wert={offeneCount} warn />
         <Kennzahl label="Lektionen" wert={lektionen.length} />
       </div>
+
+      {unbestaetigteAnlaesse.length > 0 && (
+        <div style={{ background: C.surface, border: `1px solid ${C.rose}`, borderRadius: 10, padding: 12, marginBottom: 16 }}>
+          <div style={{ color: C.rose, fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+            {unbestaetigteAnlaesse.length === 1 ? "1 unbestätigter Anlass" : `${unbestaetigteAnlaesse.length} unbestätigte Anlässe`} · CHF{" "}
+            {chf(unbestAnlaesseSumme)}
+          </div>
+          <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 10 }}>
+            Diese Anlässe haben stattgefunden, sind aber nicht bestätigt. Sie fehlen deshalb in der Abrechnung und im Excel-Export.
+            Mit «Gehalten» bestätigen (Haupt- und Team-Beträge werden dann mitgezählt).
+          </div>
+          {unbestaetigteAnlaesse.map((u) => (
+            <div key={u.a.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "6px 0", borderTop: `1px solid ${C.line}` }}>
+              <span className="mono" style={{ fontSize: 12, color: C.inkSoft }}>
+                {datumLabel(u.a.datum)}
+              </span>
+              <strong style={{ fontSize: 13 }}>{u.a.titel}</strong>
+              <span style={{ fontSize: 12, color: C.inkSoft, flex: 1, minWidth: 180 }}>
+                {u.beteiligte.map((b) => `${name(b.lehrer_id)} ${chf(b.betrag)}`).join(" · ")}
+              </span>
+              <Knopf klein variante="voll" disabled={monatGesperrt} onClick={() => anlassBestaetigen(u.a)}>
+                Gehalten
+              </Knopf>
+            </div>
+          ))}
+          {monatGesperrt && (
+            <div style={{ fontSize: 12, color: C.rose, marginTop: 8 }}>
+              Der Monat ist abgeschlossen, hier lässt sich nichts mehr bestätigen.
+            </div>
+          )}
+        </div>
+      )}
 
       {zeigeUnbestaetigt && unbestaetigteListe.length > 0 && (
         <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, overflow: "auto", marginBottom: 16, maxHeight: 340 }}>
